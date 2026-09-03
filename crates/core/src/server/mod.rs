@@ -6,4 +6,10 @@
 //! por ângulos diferentes — e porque errar a fronteira entre elas foi a origem
 //! dos defeitos que motivaram esta migração.
 
+pub mod config;
+pub mod log;
+pub mod plugin;
+pub mod process;
 pub mod rcon;
+pub mod secrets;
+pub mod types;

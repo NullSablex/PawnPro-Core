@@ -1,15 +1,8 @@
 //! Cores literais do SA-MP/open.mp em código Pawn.
 //!
-//! Formato oficial (open.mp): `0xRRGGBBAA` — o alpha é o ÚLTIMO byte.
-//! Confirmado pela doc de `SetPlayerColor`: vermelho = `0xFF0000FF`.
-//!
-//! Também aceita `0xRRGGBB` (6 dígitos, sem alpha): tratado como opaco (A=FF).
-//!
-//! E o formato de cor embutida em texto do SA-MP, `{RRGGBB}` (chat, textdraws,
-//! `GameText`): 6 dígitos hex entre chaves, sempre opaco e sem alpha.
-//!
-//! Só varredura de texto e conversão de cor: a camada do editor liga isto ao
-//! `DocumentColorProvider`.
+//! Três formatos: `0xRRGGBBAA` (o oficial do open.mp, com o alpha no ÚLTIMO
+//! byte — vermelho é `0xFF0000FF`), `0xRRGGBB` tratado como opaco, e o
+//! `{RRGGBB}` embutido em texto do SA-MP.
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -23,10 +16,7 @@ pub struct RgbaColor {
     pub alpha: f64,
 }
 
-/// Quantidade de dígitos hex de um literal.
-///
-/// É `enum` e não número porque só 6 e 8 existem — e o formato original precisa
-/// ser preservado na reescrita.
+/// Só 6 e 8 existem, e o formato original precisa sobreviver à reescrita.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HexDigits {
@@ -46,13 +36,11 @@ pub struct ColorLiteral {
     pub digits: HexDigits,
     /// Cor resultante, já com o alpha ajustado quando há `alpha_add`.
     pub color: RgbaColor,
-    /// Idioma SA-MP de ajuste de alpha por aritmética: `0xRRGGBBAA + N` / `- N`.
+    /// Operando do idioma `0xRRGGBBAA ± N`, com sinal.
     ///
-    /// Guarda o operando N com sinal, para reconstruir a forma `base±N` na
-    /// edição. Só é preenchido quando a soma afeta apenas o byte de alpha.
+    /// Só preenchido quando a soma afeta apenas o byte de alpha.
     pub alpha_add: Option<i32>,
-    /// Formato `{RRGGBB}` do SA-MP. Sempre 6 dígitos, opaco. Guardado para
-    /// reescrever no mesmo formato — senão viraria `0x...`.
+    /// Formato `{RRGGBB}`, guardado para a reescrita não virar `0x...`.
     pub braces: bool,
 }
 
@@ -60,10 +48,8 @@ fn byte_to_unit(b: u8) -> f64 {
     f64::from(b) / 255.0
 }
 
-/// Converte 0..=1 para 0..=255, com corte nas pontas.
-///
-/// O corte vem antes da conversão porque o editor pode entregar um canal fora
-/// da faixa, e um cast direto viraria lixo.
+/// O corte vem antes da conversão: o editor pode entregar um canal fora da
+/// faixa, e um cast direto viraria lixo.
 fn unit_to_byte(u: f64) -> u8 {
     let scaled = (u * 255.0).round();
     if scaled <= 0.0 {
@@ -104,11 +90,8 @@ pub fn parse_hex_color(hex: &str) -> Option<RgbaColor> {
     })
 }
 
-/// `0x` seguido de exatamente 8 ou 6 dígitos hex, com fronteira de palavra
-/// depois para não casar `0xF97804FFAB` (10 dígitos) como se fosse 8.
-///
-/// Os grupos 2 e 3, opcionais, são o operador `+`/`-` e um inteiro decimal — o
-/// idioma de ajuste de alpha.
+/// A fronteira de palavra impede casar `0xF97804FFAB` (10 dígitos) como se
+/// fosse 8. Os grupos 2 e 3 são o `± N` opcional.
 fn color_regex() -> &'static Regex {
     use std::sync::OnceLock;
     static RX: OnceLock<Regex> = OnceLock::new();
@@ -118,9 +101,7 @@ fn color_regex() -> &'static Regex {
     })
 }
 
-/// Cor embutida do SA-MP: `{RRGGBB}`, exatamente 6 dígitos hex entre chaves.
-///
-/// Aparece dentro de strings de chat e textdraw, como `"{FF0000}Vermelho"`.
+/// Cor embutida do SA-MP, como em `"{FF0000}Vermelho"`.
 fn braces_regex() -> &'static Regex {
     use std::sync::OnceLock;
     static RX: OnceLock<Regex> = OnceLock::new();
@@ -149,19 +130,15 @@ pub fn find_color_literals(text: &str) -> Vec<ColorLiteral> {
         };
         let literal_end = whole.start() + 2 + hex.len();
 
-        // Idioma `0x...AA ± N`: ajusta o byte de alpha por aritmética. Só é
-        // interpretado quando o literal tem alpha explícito (8 dígitos) E o
-        // resultado cabe em 0..=255 — isto é, a soma afeta apenas o byte de
-        // alpha, sem carry para o byte azul. Fora disso o resultado dependeria
-        // dos outros canais e o swatch enganaria.
+        // Só interpreta o `± N` com alpha explícito e sem carry para o byte
+        // azul: fora disso o resultado dependeria dos outros canais e o swatch
+        // enganaria.
         if let (Some(op), Some(num), HexDigits::Eight) = (c.get(2), c.get(3), digits)
             && let Ok(n) = num.as_str().parse::<i32>()
         {
             let delta = if op.as_str() == "-" { -n } else { n };
             let result = i32::from(alpha_byte(&color)) + delta;
-            // `try_from` no lugar de um cast com `allow`: a faixa 0..=255 é
-            // exatamente o que torna a conversão válida, e deixá-la explícita
-            // dispensa silenciar o compilador para provar isso.
+            // A faixa 0..=255 é o que torna a conversão válida.
             if let Ok(alpha) = u8::try_from(result) {
                 out.push(ColorLiteral {
                     start: whole.start(),
@@ -224,9 +201,8 @@ fn rgb_hex(color: &RgbaColor) -> String {
 
 /// Formata uma cor de volta para literal Pawn.
 ///
-/// `prefer` mantém o formato original quando possível: um literal de 6 dígitos
-/// que continua opaco volta como 6 dígitos; se o usuário introduziu
-/// transparência, é promovido a 8 — senão o alpha seria descartado em silêncio.
+/// Mantém 6 dígitos enquanto a cor for opaca; promove a 8 quando surge
+/// transparência, que senão seria descartada em silêncio.
 #[must_use]
 pub fn format_hex_color(color: &RgbaColor, prefer: HexDigits) -> String {
     let a = alpha_byte(color);
@@ -237,11 +213,10 @@ pub fn format_hex_color(color: &RgbaColor, prefer: HexDigits) -> String {
     }
 }
 
-/// Reescreve uma cor preservando o idioma `base±N` de ajuste de alpha.
+/// Reescreve preservando o idioma `base±N`.
 ///
-/// O literal base mantém o alpha original e o operando `N` é recalculado para
-/// atingir o novo alpha. Assim, editar `0x9900CC00+20` não achata a expressão
-/// em `0x9900CC14` — mantém a forma que o autor escreveu.
+/// Editar `0x9900CC00+20` não achata a expressão em `0x9900CC14`: a forma que
+/// o autor escreveu sobrevive.
 #[must_use]
 pub fn format_alpha_add_color(color: &RgbaColor, base_alpha_byte: u8) -> String {
     let base = format!("0x{}{}", rgb_hex(color), hex_byte(base_alpha_byte));
@@ -253,10 +228,7 @@ pub fn format_alpha_add_color(color: &RgbaColor, base_alpha_byte: u8) -> String 
     }
 }
 
-/// Reescreve uma cor no formato `{RRGGBB}` do SA-MP.
-///
-/// Esse formato não carrega alpha; o canal é descartado, porque o texto do jogo
-/// não o usa.
+/// O formato não carrega alpha: o canal é descartado.
 #[must_use]
 pub fn format_braces_color(color: &RgbaColor) -> String {
     format!("{{{}}}", rgb_hex(color))

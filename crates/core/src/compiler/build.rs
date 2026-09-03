@@ -13,10 +13,10 @@ pub struct CompileArgs {
     pub exe: PathBuf,
     pub args: Vec<String>,
     pub cwd: PathBuf,
-    /// Flags que a build local não aceita e foram retiradas.
+    /// Flags retiradas por a build local não aceitá-las.
     ///
-    /// Volta ao chamador para poder avisar: descartar em silêncio faria o
-    /// usuário procurar por que a configuração dele não surtiu efeito.
+    /// Descartar em silêncio faria o usuário procurar por que a configuração
+    /// dele não surtiu efeito.
     pub removed_flags: Vec<String>,
 }
 
@@ -30,10 +30,8 @@ pub struct CompileResult {
     pub output: String,
 }
 
-/// A chave que identifica uma flag do `pawncc`.
-///
-/// As simbólicas vêm primeiro porque `-(` e `-;` não casariam com a regra de
-/// caractere alfanumérico, e `XD` antes de `X` porque é prefixo dela.
+/// As simbólicas vêm primeiro porque `-(` e `-;` não são alfanuméricas, e
+/// `XD` antes de `X` porque é prefixo dela.
 fn capture_flag_key(arg: &str) -> Option<String> {
     let rest = arg.strip_prefix('-')?;
     for sym in ['(', ';', '\\', '^'] {
@@ -55,16 +53,12 @@ pub struct SanitizedArgs {
     pub removed: Vec<String>,
 }
 
-/// Remove das opções do usuário o que esta build do compilador não entende.
+/// Remove o que esta build do compilador não entende.
 ///
-/// Passar uma flag desconhecida faz o `pawncc` abortar por um motivo que não
-/// tem relação com o código — e o usuário não teria como saber disso.
+/// Uma flag desconhecida faz o `pawncc` abortar por um motivo sem relação com
+/// o código. Normaliza `/d` para `-d` e `-(` para `-(+`.
 ///
-/// Também normaliza: `/d` vira `-d` (estilo Windows), e `-(` vira `-(+`, que é
-/// a forma completa que o compilador espera.
-///
-/// `-i` e `-o` são retirados sempre: quem os define é a montagem, a partir do
-/// projeto, e um valor do usuário ali competiria com ela.
+/// `-i` e `-o` saem sempre: quem os define é a montagem, a partir do projeto.
 #[must_use]
 pub fn sanitize_user_args(base: &[String], supported: &Supported) -> SanitizedArgs {
     let mut kept = Vec::new();
@@ -112,11 +106,8 @@ pub fn has_debug_flag(args: &[String]) -> bool {
     })
 }
 
-/// Remove qualquer `-d0..3` e acrescenta `-d3`.
-///
-/// Depurar exige `-d3` (símbolos e linhas); `-d1` e `-d2` não bastam para o
-/// hook nem para a inspeção. Vale só para esta compilação — a configuração do
-/// usuário não é alterada.
+/// Depurar exige `-d3` (símbolos e linhas): `-d1` e `-d2` não bastam para o
+/// hook nem para a inspeção. Vale só para esta compilação.
 fn force_debug_level(args: &mut Vec<String>) {
     args.retain(|a| {
         let t = a.trim();
@@ -167,20 +158,18 @@ pub fn build_compile_args(
 
 /// Executa o compilador e devolve a saída decodificada.
 ///
-/// `stdout` e `stderr` vão para o mesmo buffer, na ordem em que chegam: o
-/// `pawncc` mistura os dois, e separá-los embaralharia a relação entre erro e
-/// contexto.
+/// `stdout` e `stderr` no mesmo buffer: o `pawncc` mistura os dois, e
+/// separá-los embaralharia a relação entre erro e contexto.
 ///
 /// # Errors
-/// Falha ao lançar o processo — executável ausente ou sem permissão.
+/// Falha ao lançar o processo.
 pub fn run_compile(
     exe: &Path,
     args: &[String],
     cwd: &Path,
     encoding: &str,
 ) -> std::io::Result<CompileResult> {
-    // Sem shell: os argumentos vão como estão, e um caminho com espaço ou
-    // metacaractere não vira injeção de comando.
+    // Sem shell: um caminho com espaço ou metacaractere não vira injeção.
     let out = Command::new(exe).args(args).current_dir(cwd).output()?;
 
     let mut bytes = out.stdout;
@@ -201,10 +190,8 @@ pub fn run_compile(
     })
 }
 
-/// Decodifica a saída do compilador.
-///
 /// O `pawncc` escreve em windows-1252 na maioria das builds; ler como UTF-8
-/// transformaria acentos em lixo bem no meio das mensagens de erro.
+/// transformaria acentos em lixo no meio das mensagens de erro.
 #[must_use]
 pub fn decode_output(bytes: &[u8], encoding: &str) -> String {
     let label = if encoding.is_empty() {

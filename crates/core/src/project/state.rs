@@ -1,8 +1,7 @@
 //! Estado local do projeto: favoritos e histórico do painel do servidor.
 //!
-//! Vive em `.pawnpro/state.json`, separado da configuração porque não é
-//! configuração: são dados de operação de quem desenvolve, que não pertencem ao
-//! repositório nem a outro usuário da máquina.
+//! Vive em `.pawnpro/state.json`. Não é configuração: são dados de operação,
+//! que não pertencem ao repositório nem a outro usuário da máquina.
 
 use std::fs;
 use std::io;
@@ -11,7 +10,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// Pasta do projeto onde a extensão guarda configuração e estado.
-pub const PAWNPRO_DIR: &str = ".pawnpro";
+///
+/// Reexportada de `config`: o nome estava repetido em oito lugares no
+/// TypeScript, e renomeá-lo exigiria achar todos.
+pub use crate::config::PAWNPRO_DIR;
 
 /// Estado do painel do servidor.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,8 +40,8 @@ pub struct StateManager {
 impl StateManager {
     /// Abre o estado de um projeto, criando o que faltar.
     ///
-    /// Um arquivo ausente, ilegível ou corrompido resulta no estado padrão: o
-    /// histórico do painel não vale interromper o carregamento do projeto.
+    /// Arquivo ausente ou corrompido cai no padrão: o histórico não vale
+    /// interromper o carregamento do projeto.
     #[must_use]
     pub fn new(project_root: &Path) -> Self {
         let dir = project_root.join(PAWNPRO_DIR);
@@ -112,7 +114,7 @@ fn ensure_ignored(dir: &Path) {
     );
 }
 
-/// Grava o estado de forma atômica e com permissão restrita.
+/// Grava de forma atômica e com permissão restrita.
 fn write_state(path: &Path, data: &PawnProState) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
@@ -121,9 +123,7 @@ fn write_state(path: &Path, data: &PawnProState) -> io::Result<()> {
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     json.push('\n');
 
-    // Escreve num temporário e renomeia: um `write` interrompido no meio
-    // deixaria um JSON truncado, e o `rename` é atômico no mesmo sistema de
-    // arquivos.
+    // Um `write` interrompido deixaria JSON truncado; o `rename` é atômico.
     let tmp = path.with_extension("json.tmp");
     fs::write(&tmp, json)?;
     restrict_permissions(&tmp);
@@ -136,17 +136,15 @@ fn write_state(path: &Path, data: &PawnProState) -> io::Result<()> {
 
 /// Restringe o arquivo ao dono (0600).
 ///
-/// O histórico guarda o que se digitou no painel do servidor. Mesmo filtrando o
-/// que parece credencial, o resto revela a operação do servidor — não há motivo
-/// para outros usuários da máquina lerem.
+/// Mesmo filtrando o que parece credencial, o histórico revela a operação do
+/// servidor — não há motivo para outros usuários da máquina lerem.
 #[cfg(unix)]
 fn restrict_permissions(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
 }
 
-/// No Windows o modo POSIX é ignorado pelo sistema: quem vale é a ACL do
-/// diretório, herdada do perfil do usuário.
+/// No Windows vale a ACL do diretório, não o modo POSIX.
 #[cfg(not(unix))]
 fn restrict_permissions(_path: &Path) {}
 

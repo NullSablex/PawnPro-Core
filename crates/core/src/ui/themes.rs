@@ -1,8 +1,7 @@
 //! Esquemas de realce de sintaxe do Pawn.
 //!
-//! A extensão injeta regras `TextMate` nas configurações do editor. O trabalho
-//! aqui é escolher o esquema, ler seu arquivo e fundir as regras com as que já
-//! existem — sem apagar as de outras linguagens.
+//! Escolhe o esquema, lê o arquivo dele e funde as regras `TextMate` com as que
+//! já existem, sem apagar as de outras linguagens.
 
 use std::fs;
 use std::path::Path;
@@ -20,9 +19,8 @@ pub enum ThemeKind {
 
 /// Esquema de cores que o usuário pode escolher.
 ///
-/// É `enum` e não string porque o conjunto é fechado: cada variante tem um
-/// arquivo correspondente, e um valor livre viraria um caminho inexistente.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Fechado: um valor livre viraria um caminho de arquivo inexistente.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Scheme {
     /// Segue o tema do editor.
@@ -32,6 +30,10 @@ pub enum Scheme {
     ClassicDark,
     ModernDark,
     /// Sem realce próprio: as regras do Pawn são removidas.
+    ///
+    /// É o padrão da configuração — a extensão não mexe nas cores do editor
+    /// sem o usuário pedir.
+    #[default]
     None,
 }
 
@@ -42,8 +44,8 @@ pub enum Scheme {
 /// valor. Um número ali é `f64`, que não tem igualdade total.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TokenColorRule {
-    /// Um escopo ou vários — o editor aceita as duas formas, e preservá-las
-    /// evita reescrever regras de terceiros num formato diferente do original.
+    /// O editor aceita as duas formas; preservá-las evita reescrever regras
+    /// de terceiros num formato diferente.
     pub scope: Scopes,
     pub settings: serde_json::Map<String, serde_json::Value>,
 }
@@ -109,8 +111,8 @@ impl Scheme {
 
     /// Rótulo exibido ao usuário.
     ///
-    /// Fica junto da variante, e não numa tabela paralela: separá-los deixaria
-    /// um esquema novo passar sem rótulo, e o compilador não avisaria.
+    /// Junto da variante, e não numa tabela paralela: separados, um esquema
+    /// novo passaria sem rótulo.
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
@@ -123,10 +125,10 @@ impl Scheme {
         }
     }
 
-    /// Caminho do arquivo do esquema, relativo à pasta da extensão.
+    /// Caminho relativo à pasta da extensão.
     ///
-    /// `None` para `Auto` e `None`, que não têm arquivo próprio: o primeiro
-    /// resolve para outro esquema, e o segundo significa remover as regras.
+    /// `Auto` resolve para outro esquema e `None` remove as regras: nenhum dos
+    /// dois tem arquivo.
     #[must_use]
     pub const fn file(self) -> Option<&'static str> {
         match self {
@@ -145,10 +147,7 @@ impl Scheme {
     }
 }
 
-/// Esquema que o modo automático escolhe para o tema em uso.
-///
-/// Alto contraste vai com o escuro: as duas variantes de fundo escuro pedem as
-/// mesmas cores de token.
+/// Alto contraste vai com o escuro: os dois fundos pedem as mesmas cores.
 #[must_use]
 pub const fn pick_auto_scheme(theme: ThemeKind) -> Scheme {
     match theme {
@@ -159,8 +158,8 @@ pub const fn pick_auto_scheme(theme: ThemeKind) -> Scheme {
 
 /// Lê o arquivo de um esquema.
 ///
-/// Devolve `None` quando o esquema não tem arquivo, ou quando ele está ausente
-/// ou malformado — o realce é acessório e não vale interromper a ativação.
+/// `None` se não há arquivo, ou se ele está ausente ou malformado: o realce é
+/// acessório e não vale interromper a ativação.
 #[must_use]
 pub fn read_scheme_from_file(extension_dir: &Path, scheme: Scheme) -> Option<TokenColorScheme> {
     let raw = fs::read_to_string(extension_dir.join(scheme.file()?)).ok()?;
@@ -173,10 +172,9 @@ fn is_pawn_scope(scope: &str) -> bool {
     scope.contains(".pawn")
 }
 
-/// Compara duas listas de regras ignorando a ordem dos escopos.
+/// Compara ignorando a ordem dos escopos.
 ///
-/// Serve para não regravar a configuração do usuário quando nada mudou de
-/// fato — uma escrita à toa dispara os watchers e reinicia trabalho.
+/// Evita regravar a configuração à toa, o que dispararia os watchers.
 #[must_use]
 pub fn same_pawn_rules(a: &[TokenColorRule], b: &[TokenColorRule]) -> bool {
     a.len() == b.len()
@@ -187,8 +185,8 @@ pub fn same_pawn_rules(a: &[TokenColorRule], b: &[TokenColorRule]) -> bool {
 
 /// Substitui as regras do Pawn, preservando as demais.
 ///
-/// Remover só o que é do Pawn é o ponto: as regras vêm da configuração global
-/// do usuário, que pode ter cores de outras linguagens ali.
+/// As regras vêm da configuração global do usuário, que pode ter cores de
+/// outras linguagens.
 #[must_use]
 pub fn merge_token_colors(
     current: &[TokenColorRule],

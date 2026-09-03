@@ -12,8 +12,7 @@ use std::path::{Path, PathBuf};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-/// Pasta do projeto onde a extensão guarda configuração e estado.
-use crate::state::PAWNPRO_DIR;
+use crate::config::PAWNPRO_DIR;
 
 /// Subpastas de include, na ordem em que o compilador as procura.
 const INCLUDE_SUBDIRS: [&str; 3] = ["qawno/include", "pawno/include", "include"];

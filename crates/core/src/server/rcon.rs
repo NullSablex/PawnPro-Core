@@ -1,23 +1,17 @@
 //! Cliente RCON do protocolo de consulta SA-MP / open.mp.
 //!
-//! O protocolo é UDP sem retransmissão: cada datagrama pode se perder, e a
-//! resposta a um comando chega como uma rajada que só termina no silêncio. Duas
-//! consequências moldam este módulo:
+//! UDP sem retransmissão, e duas consequências moldam o módulo:
 //!
-//! - **Enviar não é executar.** Sem o servidor no ar, o datagrama some sem erro
-//!   nenhum. Por isso [`RconClient::send`] sonda a porta antes: na versão
-//!   anterior, em TypeScript, o comando ia para um servidor parado e a interface
-//!   respondia "enviado".
+//! - **Enviar não é executar.** Sem servidor no ar o datagrama some sem erro,
+//!   por isso [`RconClient::send`] sonda a porta antes.
 //! - **A resposta não se identifica.** O datagrama não diz a que comando
-//!   pertence, então quem envia dois seguidos precisa correlacionar pela ordem
-//!   de espera — não por qual chega primeiro. [`RconReply`] carrega o comando
-//!   de volta por isso.
+//!   pertence; [`RconReply`] carrega o comando de volta por isso.
 
 use std::io;
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 
-use crate::types::{RconError, RconReply, ServerAddr};
+use crate::server::types::{RconError, RconReply, ServerAddr};
 
 /// Assinatura que abre todo datagrama do protocolo.
 const MAGIC: &[u8; 4] = b"SAMP";
@@ -26,10 +20,8 @@ const HEADER_LEN: usize = 11;
 
 /// `true` se o host é loopback.
 ///
-/// Decide se a senha do RCON pode sair em texto claro, então erra para o lado
-/// seguro: qualquer coisa que não seja comprovadamente loopback é remota.
-/// `0.0.0.0` é o curinga "todas as interfaces", **não** loopback — tratá-lo
-/// como local mandaria a senha para fora da máquina.
+/// Decide se a senha pode sair em texto claro, então erra para o lado seguro.
+/// `0.0.0.0` é o curinga "todas as interfaces" e **não** conta como local.
 #[must_use]
 pub fn is_loopback_host(host: &str) -> bool {
     let h = host.trim().trim_start_matches('[').trim_end_matches(']');
@@ -41,10 +33,8 @@ pub fn is_loopback_host(host: &str) -> bool {
 
 /// Os quatro octetos que o cabeçalho do protocolo exige.
 ///
-/// Só IPv4 numérico: o campo tem 4 bytes e não há como representar um nome ou
-/// um IPv6 ali. `None` diz ao chamador que este host não cabe no protocolo, em
-/// vez de inventar um endereço — a versão em TS caía num `127.0.0.1` fixo, o
-/// que mandava o pacote com IP errado no cabeçalho para qualquer host nomeado.
+/// Só IPv4 numérico: o campo tem 4 bytes e não cabe nome nem IPv6. `None` em
+/// vez de um endereço inventado, que mandaria o pacote com IP errado.
 fn ipv4_octets(host: &str) -> Option<[u8; 4]> {
     let h = host.trim();
     match h.parse::<IpAddr>() {
@@ -73,10 +63,10 @@ fn io_err(e: &io::Error) -> RconError {
     }
 }
 
-/// Sonda se há servidor vivo em `addr`, pelo opcode `p` (ping).
+/// Sonda se há servidor vivo, pelo opcode `p`.
 ///
-/// O ping **não exige senha** e devolve o mesmo token de 4 bytes, o que o torna
-/// o único jeito de saber que a porta responde sem depender de credencial.
+/// O ping não exige senha: é o único jeito de saber que a porta responde sem
+/// depender de credencial.
 ///
 /// # Errors
 /// [`RconError::Io`] se o socket falhar; o timeout devolve `Ok(false)`.
@@ -102,11 +92,8 @@ pub fn ping(addr: &ServerAddr, timeout: Duration) -> Result<bool, RconError> {
     Ok(await_pong(&socket, token, timeout))
 }
 
-/// Espera o eco do token dentro do prazo.
-///
-/// Descarta datagramas que não tenham a assinatura ou o token: a porta efêmera
-/// recebe qualquer coisa que chegue nela, e sem esse filtro um pacote alheio
-/// passaria por resposta do servidor.
+/// Descarta datagramas sem a assinatura ou o token: a porta efêmera recebe
+/// qualquer coisa, e um pacote alheio passaria por resposta do servidor.
 fn await_pong(socket: &UdpSocket, token: [u8; 4], timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     let mut buf = [0u8; 1500];
@@ -124,10 +111,8 @@ fn await_pong(socket: &UdpSocket, token: [u8; 4], timeout: Duration) -> bool {
     false
 }
 
-/// Token de 4 bytes, sem dependência externa.
-///
-/// Não é criptográfico e não precisa ser: serve só para distinguir a resposta
-/// desta sondagem de um datagrama antigo que ainda esteja no caminho.
+/// Não é criptográfico e não precisa ser: só distingue esta resposta de um
+/// datagrama antigo ainda no caminho.
 fn rand_token() -> [u8; 4] {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()
@@ -148,13 +133,12 @@ pub struct RconClient {
 impl RconClient {
     /// Envia um comando e devolve o que o servidor respondeu.
     ///
-    /// A ordem das checagens é deliberada: as baratas e conclusivas primeiro
-    /// (RCON desligado, host remoto, senha ausente), e só então a sondagem, que
-    /// custa um datagrama e um prazo de espera.
+    /// As checagens vão da mais barata à mais cara: a sondagem custa um
+    /// datagrama e um prazo, e vem por último.
     ///
     /// # Errors
-    /// Ver [`RconError`]. Cada variante corresponde a uma condição distinta que
-    /// a interface precisa distinguir — nunca a um "falhou" genérico.
+    /// Ver [`RconError`] — uma variante por condição, nunca um "falhou"
+    /// genérico.
     pub fn send(&self, command: &str, timeout: Duration) -> Result<RconReply, RconError> {
         if !self.enabled {
             return Err(RconError::Disabled);
@@ -167,9 +151,8 @@ impl RconClient {
         if self.password.is_empty() || self.password.eq_ignore_ascii_case("changename") {
             return Err(RconError::InvalidPassword);
         }
-        // Antes de enviar: sem servidor no ar o datagrama some sem erro, e o
-        // chamador não teria como distinguir "executou em silêncio" de "não
-        // chegou a ninguém".
+        // Sem isto, "executou em silêncio" e "não chegou a ninguém" seriam
+        // indistinguíveis.
         if !ping(&self.addr, Duration::from_millis(500))? {
             return Err(RconError::ServerDown {
                 addr: self.addr.clone(),
@@ -199,17 +182,16 @@ impl RconClient {
             .map_err(|e| io_err(&e))?;
 
         Ok(RconReply {
-            // O comando volta junto: a resposta chega depois de um silêncio, e
-            // sem esta correlação dois envios seguidos trocavam de saída.
+            // Sem esta correlação dois envios seguidos trocam de saída.
             command: command.to_string(),
             lines: self.collect_lines(&socket, timeout),
         })
     }
 
-    /// Lê a rajada de resposta até o silêncio que a fecha.
+    /// Lê a rajada até o silêncio.
     ///
-    /// Não há marcador de fim no protocolo: o servidor manda uma linha por
-    /// datagrama e simplesmente para. O prazo de leitura é o que define o fim.
+    /// O protocolo não tem marcador de fim: o servidor manda uma linha por
+    /// datagrama e para. O prazo define o fim.
     fn collect_lines(&self, socket: &UdpSocket, timeout: Duration) -> Vec<String> {
         let deadline = Instant::now() + timeout;
         let mut buf = [0u8; 1500];
@@ -218,8 +200,7 @@ impl RconClient {
             let Ok((n, from)) = socket.recv_from(&mut buf) else {
                 break;
             };
-            // Só o que veio do servidor consultado e traz a assinatura: a porta
-            // efêmera recebe qualquer datagrama que chegue nela.
+            // A porta efêmera recebe qualquer datagrama que chegue nela.
             if from.port() != self.addr.port || n < HEADER_LEN + 2 || &buf[..4] != MAGIC {
                 continue;
             }
@@ -337,6 +318,109 @@ mod tests {
                 "{pw}"
             );
         }
+    }
+
+    /// Servidor de mentira que responde ao ping e a um comando.
+    ///
+    /// Sem ele não dá para testar o caminho de sucesso — e era justamente ali
+    /// que estava a segunda metade do bug: a resposta chegava sem dizer a que
+    /// comando pertencia.
+    fn fake_server() -> (u16, std::thread::JoinHandle<()>) {
+        let socket = UdpSocket::bind(("127.0.0.1", 0)).expect("bind");
+        let port = socket.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .expect("timeout");
+            let mut buf = [0u8; 1500];
+            // Duas mensagens: o ping do `send` e o comando em si.
+            for _ in 0..2 {
+                let Ok((n, from)) = socket.recv_from(&mut buf) else {
+                    return;
+                };
+                if n < HEADER_LEN {
+                    continue;
+                }
+                match buf[10] {
+                    // Ping: devolve o mesmo token, que são os 4 últimos bytes.
+                    b'p' => {
+                        let _ = socket.send_to(&buf[..n], from);
+                    }
+                    // Comando: cabeçalho + tamanho + texto.
+                    b'x' => {
+                        let text = b"resposta do servidor";
+                        let mut out = buf[..HEADER_LEN].to_vec();
+                        out.extend_from_slice(
+                            &u16::try_from(text.len()).unwrap_or(0).to_le_bytes(),
+                        );
+                        out.extend_from_slice(text);
+                        let _ = socket.send_to(&out, from);
+                    }
+                    _ => {}
+                }
+            }
+        });
+        (port, handle)
+    }
+
+    #[test]
+    fn the_reply_carries_the_command_that_produced_it() {
+        // A correlação é o que impede duas saídas trocarem de lugar no painel:
+        // a resposta chega depois de um silêncio, e nada no protocolo diz a
+        // que comando ela pertence.
+        let (port, handle) = fake_server();
+        let client = RconClient {
+            addr: ServerAddr {
+                host: "127.0.0.1".into(),
+                port,
+            },
+            password: "senha".into(),
+            enabled: true,
+        };
+        let reply = client
+            .send("gmx", Duration::from_millis(600))
+            .expect("servidor de teste responde");
+        assert_eq!(reply.command, "gmx");
+        assert_eq!(reply.lines, ["resposta do servidor"]);
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn a_command_without_output_is_not_a_failure() {
+        // `gmx` e `players` sem ninguém on-line executam e não devolvem texto.
+        // Sem distinguir isso de uma falha, o sucesso silencioso ficava
+        // idêntico ao erro silencioso.
+        let socket = UdpSocket::bind(("127.0.0.1", 0)).expect("bind");
+        let port = socket.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .expect("timeout");
+            let mut buf = [0u8; 1500];
+            // Responde só ao ping; ao comando, silêncio.
+            if let Ok((n, from)) = socket.recv_from(&mut buf)
+                && n >= HEADER_LEN
+                && buf[10] == b'p'
+            {
+                let _ = socket.send_to(&buf[..n], from);
+            }
+        });
+
+        let client = RconClient {
+            addr: ServerAddr {
+                host: "127.0.0.1".into(),
+                port,
+            },
+            password: "senha".into(),
+            enabled: true,
+        };
+        let reply = client
+            .send("gmx", Duration::from_millis(400))
+            .expect("o comando foi enviado");
+        // Vazio é resultado legítimo, não erro.
+        assert!(reply.lines.is_empty());
+        assert_eq!(reply.command, "gmx");
+        let _ = handle.join();
     }
 
     #[test]

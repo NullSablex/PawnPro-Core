@@ -20,10 +20,9 @@ pub struct ServerAddr {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum RconError {
-    /// A porta não respondeu à sondagem: não há servidor para receber o comando.
+    /// A porta não respondeu: não há servidor para receber o comando.
     ///
-    /// Esta variante é a razão de o envio checar antes: na versão em TS o
-    /// comando ia para um servidor parado e o painel respondia "enviado".
+    /// É a razão de o envio sondar antes — o datagrama some sem erro nenhum.
     ServerDown { addr: ServerAddr },
     /// O RCON está desligado no `config.json` do servidor (`rcon.enable`).
     Disabled,
@@ -49,4 +48,20 @@ pub struct RconReply {
     /// Linhas devolvidas pelo servidor. Vazio é resultado legítimo: comandos
     /// como `gmx` executam sem devolver texto.
     pub lines: Vec<String>,
+}
+
+/// Dados de conexão lidos do `server.cfg` (SA-MP) ou do `config.json`
+/// (open.mp).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SampCfgData {
+    pub rcon_password: String,
+    pub port: u16,
+    pub host: String,
+    /// Caminho do arquivo de onde isto veio, para poder reescrevê-lo.
+    pub cfg_path: std::path::PathBuf,
+    /// `false` quando o `config.json` do open.mp traz `rcon.enable: false` — o
+    /// servidor não escuta comandos RCON. No SA-MP é sempre `true`: não há
+    /// chave equivalente.
+    pub rcon_enabled: bool,
 }

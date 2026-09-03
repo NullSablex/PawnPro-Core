@@ -1,10 +1,8 @@
 //! Tradução da interface por idioma escolhido pelo usuário.
 //!
-//! Independente do `l10n` do editor, que fixa o idioma da extensão pelo do
-//! editor e não pode ser trocado em runtime. A fonte de tradução são os mesmos
-//! bundles `l10n/bundle.l10n.<lang>.json`: a chave é a string em português e o
-//! valor é a tradução, então um único conjunto serve às notificações e às
-//! páginas.
+//! Independente do `l10n` do editor, que não pode ser trocado em runtime. Usa
+//! os mesmos bundles `l10n/bundle.l10n.<lang>.json`, onde a chave é a string
+//! em português.
 
 use std::collections::HashMap;
 use std::fs;
@@ -15,8 +13,7 @@ use serde::{Deserialize, Serialize};
 
 /// Idioma da interface.
 ///
-/// `enum` e não string porque o conjunto é fechado — cada variante tem um
-/// bundle, e um valor livre viraria um arquivo inexistente.
+/// Fechado: um valor livre viraria um bundle inexistente.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum UiLocale {
     /// Língua-fonte das chaves: não tem bundle, as chaves já estão nela.
@@ -49,11 +46,10 @@ impl UiLocale {
         }
     }
 
-    /// Reconhece uma tag de idioma pelo prefixo.
+    /// Reconhece uma tag pelo prefixo: `es-ES`, `es` e `ES` levam ao espanhol.
     ///
-    /// `es-ES`, `es` e `ES` levam todos ao espanhol: o editor entrega a tag
-    /// completa do sistema, e exigir correspondência exata deixaria a maioria
-    /// dos usuários no idioma errado.
+    /// O editor entrega a tag completa do sistema, e exigir correspondência
+    /// exata deixaria a maioria no idioma errado.
     #[must_use]
     pub fn from_tag(tag: &str) -> Option<Self> {
         let t = tag.trim().to_lowercase();
@@ -66,11 +62,8 @@ impl UiLocale {
     }
 }
 
-/// Resolve o idioma efetivo da interface.
-///
-/// O escolhido na configuração tem prioridade; vazio ou não suportado cai no
-/// idioma do editor; se nem esse for suportado, português — a língua em que as
-/// chaves estão escritas.
+/// Configuração, depois idioma do editor, depois português — a língua em que
+/// as chaves estão escritas.
 #[must_use]
 pub fn resolve_ui_locale(configured: &str, editor_lang: &str) -> UiLocale {
     UiLocale::from_tag(configured)
@@ -84,8 +77,7 @@ type Bundle = HashMap<String, String>;
 /// Bundles já lidos, por pasta e idioma.
 type BundleCache = HashMap<(String, UiLocale), Bundle>;
 
-/// Ler e parsear um bundle custa I/O e o resultado não muda enquanto a extensão
-/// vive; cada página recriaria o mesmo mapa sem isto.
+/// Sem o cache, cada página recriaria o mesmo mapa.
 fn cache() -> &'static Mutex<BundleCache> {
     static CACHE: OnceLock<Mutex<BundleCache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -135,8 +127,7 @@ impl UiTranslator {
 
     /// Traduz, substituindo `{0}`, `{1}`… pelos argumentos.
     ///
-    /// Uma chave sem tradução volta como está: é a string em português, que é
-    /// exatamente o texto-fonte.
+    /// Sem tradução a chave volta como está — é o texto-fonte.
     #[must_use]
     pub fn t(&self, pt_key: &str, args: &[&str]) -> String {
         let template = self.bundle.get(pt_key).map_or(pt_key, String::as_str);
@@ -144,10 +135,8 @@ impl UiTranslator {
     }
 }
 
-/// Substitui os marcadores posicionais do template.
-///
-/// Um índice sem argumento correspondente fica como está — perder o marcador
-/// esconderia o erro de quem chamou.
+/// Um índice sem argumento fica como está: perder o marcador esconderia o
+/// erro de quem chamou.
 fn apply_args(template: &str, args: &[&str]) -> String {
     if args.is_empty() || !template.contains('{') {
         return template.to_string();

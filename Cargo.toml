@@ -22,6 +22,9 @@ regex = "1"
 # Saída do pawncc vem em windows-1252 na maioria das builds; o `encoding_rs`
 # é o equivalente ao `iconv-lite` que a extensão usava.
 encoding_rs = "0.8"
+# Inspeção de processos multiplataforma: substitui os caminhos por SO que a
+# extensão mantinha à mão (`/proc`, `ps`, `Get-Process`, `taskkill`).
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 # O binário é distribuído dentro do VSIX: tamanho importa mais que tempo de
 # build. `lto` e `codegen-units = 1` custam compilação, não execução.

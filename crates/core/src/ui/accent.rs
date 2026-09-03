@@ -1,19 +1,15 @@
 //! Paleta de cores de destaque das páginas da extensão.
 //!
-//! Fechada de propósito: o valor entra direto em CSS, e uma cor livre não teria
-//! como garantir contraste do texto sobre ela nem legibilidade nos temas claro e
-//! escuro. Cada entrada traz o tom normal, o de hover e a cor do texto que vai
-//! por cima — os três verificados juntos.
-//!
-//! Não tem relação com o realce de sintaxe, que tem esquema próprio.
+//! Fechada de propósito: o valor entra direto em CSS, e uma cor livre não
+//! garantiria contraste nos temas claro e escuro. Sem relação com o realce de
+//! sintaxe, que tem esquema próprio.
 
 use serde::{Deserialize, Serialize};
 
 /// Cor de destaque escolhida nas configurações.
 ///
-/// `Auto` é a ausência de escolha: as páginas caem nas variáveis do tema do
-/// editor. É `enum` e não string livre porque o conjunto é fechado — cada tom
-/// foi verificado por contraste, e aceitar um valor qualquer quebraria isso.
+/// `Auto` cai nas variáveis do tema do editor. Fechado porque cada tom foi
+/// verificado por contraste.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AccentColor {
@@ -67,10 +63,9 @@ impl AccentColor {
 
     /// Tons desta cor, ou `None` no modo automático.
     ///
-    /// Tons médios: escuros o bastante para texto branco por cima (todos acima
-    /// de 4.5:1, o mínimo AA), claros o bastante para não sumirem num tema
-    /// escuro. O hover ESCURECE em vez de clarear — clarear reduziria o
-    /// contraste com o texto e três das seis cores reprovavam.
+    /// Todos acima de 4.5:1 com texto branco (mínimo AA) e claros o bastante
+    /// para não sumirem num tema escuro. O hover escurece: clarear reprovava
+    /// três das seis no contraste.
     #[must_use]
     pub const fn palette(self) -> Option<AccentPalette> {
         let p = match self {
@@ -110,10 +105,9 @@ impl AccentColor {
     }
 }
 
-/// Bloco CSS que fixa a cor escolhida, para injetar no `<style>` de uma `WebView`.
+/// Bloco CSS para injetar no `<style>` de uma `WebView`.
 ///
-/// No modo automático as variáveis apontam para as do editor, e as páginas
-/// seguem o tema como sempre.
+/// No modo automático as variáveis apontam para as do editor.
 #[must_use]
 pub fn accent_css(accent: AccentColor) -> String {
     let p = accent.palette();

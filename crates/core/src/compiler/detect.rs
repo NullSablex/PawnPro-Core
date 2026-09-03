@@ -1,17 +1,13 @@
 //! Localização do `pawncc`.
 //!
-//! O compilador pode estar configurado, no `PATH`, dentro do projeto ou num
-//! caminho de instalação comum — e o nome muda por plataforma. A ordem de busca
-//! vai do mais explícito ao mais genérico: o que o usuário apontou vence o que
-//! adivinhamos.
+//! A busca vai do mais explícito ao mais genérico: o que o usuário apontou
+//! vence o que adivinhamos.
 
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-/// Nomes do executável, por plataforma.
-///
-/// No Windows há variantes de extensão e de arquitetura; no resto, um nome só.
+/// No Windows há variantes de extensão e arquitetura; no resto, um nome só.
 fn executable_names() -> &'static [&'static str] {
     if cfg!(windows) {
         &["pawncc.exe", "pawncc64.exe", "pawncc", "pawncc.bat"]
@@ -46,10 +42,8 @@ impl fmt::Display for DetectError {
 
 impl std::error::Error for DetectError {}
 
-/// Normaliza um caminho vindo da configuração.
-///
-/// Tira aspas — que aparecem quando o usuário copia de um terminal — e expande
-/// o `~`, que o shell resolveria mas um `spawn` direto não.
+/// Tira aspas (que vêm de um copiar-colar do terminal) e expande o `~`, que o
+/// shell resolveria mas um `spawn` direto não.
 #[must_use]
 pub fn normalize_input_path(raw: &str) -> Option<PathBuf> {
     let trimmed = raw.trim().trim_matches(['"', '\'']).trim();
@@ -64,10 +58,8 @@ pub fn normalize_input_path(raw: &str) -> Option<PathBuf> {
     Some(PathBuf::from(trimmed))
 }
 
-/// `true` se o caminho é um arquivo que dá para executar.
-///
-/// No Unix confere o bit de execução: um `pawncc` sem permissão falharia no
-/// `spawn` com um erro que não diz o que fazer.
+/// No Unix confere o bit de execução: sem ele o `spawn` falha com um erro que
+/// não diz o que fazer.
 #[must_use]
 pub fn is_executable(path: &Path) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
