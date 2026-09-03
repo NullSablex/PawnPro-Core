@@ -1,0 +1,112 @@
+site_name: PawnPro Core
+site_description: Núcleo em Rust do PawnPro — supervisiona a engine (LSP) e o depurador (DAP)
+site_author: NullSablex
+site_url: https://pawnpro-core.nullsablex.com/
+
+repo_name: NullSablex/PawnPro-Core
+repo_url: https://github.com/NullSablex/PawnPro-Core
+edit_uri: edit/master/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  language: pt-BR
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/weather-night
+        name: Tema escuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/weather-sunny
+        name: Tema claro
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+# `search` fica listado explicitamente: declarar `plugins` substitui o padrão do
+# MkDocs, que traz a busca embutida.
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      languages:
+        - locale: pt-BR
+          name: Português (BR)
+          default: true
+          build: true
+        - locale: en-US
+          name: English (US)
+          build: true
+          site_description: PawnPro's Rust core — supervises the engine (LSP) and the debugger (DAP)
+          # O tema fica em `en`: o Material traduz a interface por idioma e não
+          # tem uma tabela para `en-US` (só `en`), o que quebraria o build.
+          theme:
+            language: en
+          nav_translations:
+            Início: Home
+            Interno: Internals
+            Arquitetura: Architecture
+            Supervisão: Supervision
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Link permanente
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Início: index.md
+  - Interno:
+      - Arquitetura: architecture.md
+      - Supervisão: supervision.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/NullSablex/PawnPro-Core

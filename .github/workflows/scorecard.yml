@@ -1,0 +1,56 @@
+# OpenSSF Scorecard.
+#
+# Scores the repository's supply-chain practices (branch protection, pinned
+# actions, token permissions, dependency update tooling, …) and uploads the
+# result twice: as SARIF to code scanning, and — via `publish_results` — to the
+# public OpenSSF API, which is what backs the Scorecard badge in the README.
+#
+# `publish_results` only works on a push to the default branch of a public
+# repository; on a pull request the workflow still runs and reports to code
+# scanning, without publishing.
+name: Scorecard
+
+on:
+  push:
+    branches: [ "master" ]
+  # Weekly, so the score keeps up with the checks Scorecard adds over time.
+  schedule:
+    - cron: '31 4 * * 1'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # upload the SARIF results
+      id-token: write          # OIDC token, required to publish the results
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      # Kept for 5 days so a failed upload can still be inspected.
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: results.sarif

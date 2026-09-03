@@ -1,0 +1,4 @@
+# Nomes próprios do projeto e do ecossistema. Sem isto o `doc_markdown` os toma
+# por identificadores e exige crases em toda menção — o que deixaria o texto das
+# docs pior, não melhor.
+doc-valid-idents = ["PawnPro", "SA-MP", "TypeScript", ".."]

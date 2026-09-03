@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check, Clippy & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Check
+        run: cargo check --workspace --all-targets
+
+      - name: Rustfmt
+        run: cargo fmt --all --check
+
+      - name: Clippy (pedantic, warnings as errors)
+        run: cargo clippy --workspace --all-targets -- -W clippy::pedantic -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      # Garante que o build otimizado compila sem erros.
+      - name: Build release
+        run: cargo build --workspace --release
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      # Falha se houver vulnerabilidade conhecida nas dependências (RustSec).
+      - name: Audit dependencies
+        run: cargo audit
