@@ -1,0 +1,225 @@
+name: Release Core
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions: {}
+
+jobs:
+  build-plugin:
+    name: Plugin ${{ matrix.artifact }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: i686-unknown-linux-gnu
+            out: target/i686-unknown-linux-gnu/release/libpawnpro_debug.so
+            artifact: pawnpro_debug.so
+            xwin: false
+
+          - target: i686-pc-windows-msvc
+            out: target/i686-pc-windows-msvc/release/pawnpro_debug.dll
+            artifact: pawnpro_debug.dll
+            xwin: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install multilib (Linux i686)
+        if: ${{ !matrix.xwin }}
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-multilib g++-multilib
+
+      - name: Install cargo-xwin (Windows i686)
+        if: ${{ matrix.xwin }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang llvm
+          cargo install cargo-xwin --locked
+
+      - name: Build plugin (Linux)
+        if: ${{ !matrix.xwin }}
+        run: cargo build --release -p pawnpro-debug-plugin --target ${{ matrix.target }}
+
+      - name: Build plugin (Windows via xwin)
+        if: ${{ matrix.xwin }}
+        run: cargo xwin build --xwin-arch x86 --release -p pawnpro-debug-plugin --target ${{ matrix.target }}
+
+      # O servidor carrega o plugin pelo nome do arquivo, e a extensão exige
+      # exatamente pawnpro_debug.{so,dll}: renomear aqui poupa o usuário.
+      - name: Prepare artifact
+        run: cp "${{ matrix.out }}" "${{ matrix.artifact }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          retention-days: 1
+          if-no-files-found: error
+
+  build:
+    name: Build ${{ matrix.artifact }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact: pawnpro-core-linux-x64
+            use_cross: false
+
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact: pawnpro-core-linux-arm64
+            use_cross: true
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: pawnpro-core-win32-x64.exe
+            use_cross: false
+
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: pawnpro-core-darwin-x64
+            use_cross: false
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: pawnpro-core-darwin-arm64
+            use_cross: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install musl-tools (Linux x64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get install -y --no-install-recommends musl-tools
+
+      - name: Install cross (Linux arm64)
+        if: matrix.use_cross
+        run: cargo install cross --locked
+
+      # A engine entra como biblioteca do core: o release publica um binário só.
+      - name: Build with cross
+        if: matrix.use_cross
+        run: cross build --release --target ${{ matrix.target }} -p pawnpro-core
+
+      - name: Build with cargo
+        if: '!matrix.use_cross'
+        run: cargo build --release --target ${{ matrix.target }} -p pawnpro-core
+
+      - name: Prepare binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp target/${{ matrix.target }}/release/pawnpro-core ${{ matrix.artifact }}
+          chmod +x ${{ matrix.artifact }}
+
+      - name: Prepare binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Copy-Item "target\${{ matrix.target }}\release\pawnpro-core.exe" "${{ matrix.artifact }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          retention-days: 1
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [build, build-plugin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Generate SHA-256 checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.sha256
+          echo "--- checksums ---"
+          cat checksums.sha256
+
+      - name: Build release body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+
+          # 1. Seção curada do CHANGELOG.md (cabeçalho "## [VERSÃO] - data"),
+          # aparando linhas em branco e separador "---" do fim.
+          BODY=$(awk "/^## \[?v?${VERSION}\]?/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md \
+            | awk '{lines[NR]=$0} END{n=NR; while(n>0 && (lines[n] ~ /^[[:space:]]*$/ || lines[n] ~ /^---[[:space:]]*$/)) n--; for(i=1;i<=n;i++) print lines[i]}')
+          if [ -z "$BODY" ]; then
+            BODY="Consulte o [CHANGELOG.md](CHANGELOG.md) para detalhes."
+          fi
+
+          # 2. Notas automáticas — só o bloco "New Contributors" e o link
+          # "Full Changelog"; a categorização auto é descartada.
+          AUTO=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="$TAG" -q .body 2>/dev/null || echo "")
+          APPENDIX=$(echo "$AUTO" | sed -n '/^## New Contributors$/,$p')
+          if [ -z "$APPENDIX" ]; then
+            APPENDIX=$(echo "$AUTO" | grep '^\*\*Full Changelog\*\*' | tail -1)
+          fi
+
+          {
+            echo "$BODY"
+            if [ -n "$APPENDIX" ]; then
+              printf '\n---\n\n%s\n' "$APPENDIX"
+            fi
+          } > release_body.md
+
+          cat release_body.md
+
+      - name: Create Release and upload binaries
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: dist/*
+          body_path: release_body.md
+          fail_on_unmatched_files: true
