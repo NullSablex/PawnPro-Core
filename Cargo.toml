@@ -3,6 +3,8 @@ resolver = "3"
 members = [
     "crates/core",
     "crates/engine",
+    "crates/debugger/protocol",
+    "crates/debugger/plugin",
 ]
 
 [workspace.package]

@@ -1,0 +1,18 @@
+[package]
+name = "pawnpro-debug-plugin"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+
+[lib]
+name = "pawnpro_debug"
+crate-type = ["cdylib"]
+
+[dependencies]
+pawnpro-dbg-protocol = { path = "../protocol" }
+interprocess = { workspace = true }
+samp = { package = "rust-samp", version = "3.4.0", features = ["debug"] }
+
+[package.metadata.samp]
+uid = "0x0d9107bbd31c8d1b"
