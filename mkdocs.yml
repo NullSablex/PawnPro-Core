@@ -73,6 +73,7 @@ plugins:
             Interno: Internals
             Arquitetura: Architecture
             Supervisão: Supervision
+            Dependências e build: Dependencies and build
 
 markdown_extensions:
   - admonition
@@ -105,6 +106,7 @@ nav:
   - Interno:
       - Arquitetura: architecture.md
       - Supervisão: supervision.md
+      - Dependências e build: dependencies.md
 
 extra:
   social:

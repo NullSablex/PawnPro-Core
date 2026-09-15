@@ -20,7 +20,7 @@ O core inverte isso: **quem possui o processo é quem responde sobre ele**.
 | Crate | Responsabilidade |
 |---|---|
 | `crates/core` | Supervisor e tudo que depende do sistema operacional |
-| `crates/engine` | Análise de Pawn e LSP *(a migrar)* |
+| `crates/engine` | Análise de Pawn e LSP |
 | `crates/debugger` | DAP e o servidor do jogo *(a migrar)* |
 
 Três crates, e só elas: as peças arquiteturais. Responsabilidades internas —
@@ -34,5 +34,6 @@ levar os outros junto.
 
 ## Estado
 
-Em construção. O primeiro subsistema migrado é o RCON — ver
-[Arquitetura](architecture.md) e [Supervisão](supervision.md).
+Em construção. O core já concentra o RCON, os processos e a configuração, e
+hospeda a engine num soquete local que ele supervisiona. Falta o
+depurador — ver [Arquitetura](architecture.md) e [Supervisão](supervision.md).

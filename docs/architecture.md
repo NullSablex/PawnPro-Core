@@ -18,15 +18,48 @@ sinal tinha um jeito diferente por sistema operacional.
 
 ```
 editor ──► extensão (TS) ──► pawnpro-core (um binário)
-                                  │
-                                  ├── engine    (crate, task supervisionada)
-                                  ├── debugger  (crate, task supervisionada)
-                                  └── rcon      (crate)
-                                          └──► omp-server
+                    │             │
+                    │             ├── engine    (crate, thread supervisionada)
+                    │             ├── debugger  (crate, thread supervisionada)
+                    │             └── server    (módulo: RCON, processos, portas)
+                    │                     └──► omp-server
+                    └──► LSP ──► soquete local (Unix) / named pipe (Windows)
 ```
 
-O core expõe LSP e DAP por socket local, e a extensão conecta seus clientes
-neles. Quem possui o `omp-server` passa a ser quem responde sobre ele.
+O JSON-RPC do core viaja no stdio; o LSP não caberia no mesmo canal, então a
+engine atende num soquete próprio. A extensão pergunta o endereço
+(`engine.start`, `engine.settings`) e liga o cliente nele. Quem possui o
+`omp-server` passa a ser quem responde sobre ele.
+
+**Não é TCP em loopback.** O LSP não autentica ninguém, e a engine lê do disco
+o arquivo que a URI recebida apontar: numa porta local, qualquer processo da
+máquina — de qualquer usuário — conectaria e pediria o conteúdo de qualquer
+arquivo legível pelo dono da sessão. Um soquete Unix dentro de um diretório
+`0700` faz o sistema de arquivos recusar isso; no Windows o equivalente é um
+named pipe.
+
+O endereço é reservado uma vez e sobrevive aos reinícios da engine: quando ela
+cai e o supervisor a levanta de novo, a extensão reconecta no mesmo lugar em
+vez de ter de descobri-lo outra vez.
+
+## Quem entrega a configuração
+
+O core, e só ele. A engine não abre `config.json` nem os arquivos de lista: o
+core lê os dois escopos, resolve includes, SDK, formatação e nomenclatura, e
+entrega o resultado por um canal interno — uma `struct` Rust, não um objeto
+JSON, porque as duas compilam juntas e o compilador pode garantir o acordo.
+
+```
+config.json (global + projeto)  ──►  core  ──►  canal tipado  ──►  engine
+.ban / .allow                        │
+                                     └── confere os carimbos de tempo
+```
+
+O core também é quem percebe a mudança: confere os carimbos de tempo dos
+arquivos a cada dois segundos e reentrega quando algum muda. A engine republica
+os diagnósticos sem o editor pedir. Antes isso era papel da extensão, que
+observava os arquivos e mandava `workspace/didChangeConfiguration` — o mesmo
+trabalho que o core faz agora, do lado que possui os arquivos.
 
 ## Princípios
 

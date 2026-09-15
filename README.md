@@ -9,7 +9,7 @@ sistema operacional.
 | Crate | Responsabilidade |
 |---|---|
 | `crates/core` | Supervisor e tudo que depende do sistema operacional |
-| `crates/engine` | Análise de Pawn e LSP *(a migrar)* |
+| `crates/engine` | Análise de Pawn e LSP |
 | `crates/debugger` | DAP e o servidor do jogo *(a migrar)* |
 
 Três crates, e só elas: as peças arquiteturais. Responsabilidades internas —
@@ -22,6 +22,9 @@ criaria fronteiras sem separar nada.
 ```bash
 cargo build --release
 ```
+
+As dependências, o perfil de release e como atualizá-los estão em
+[`docs/dependencies.md`](docs/dependencies.md).
 
 ## Verificação (igual à do CI)
 
@@ -37,4 +40,5 @@ cargo test --workspace
 
 ## Licença
 
-AGPL-3.0-or-later. Ver [LICENSE](LICENSE).
+PawnPro-Core License v1.1 — Source-Available (não Open Source).  
+Uso pessoal e comercial permitido ✅ · Redistribuição gratuita com atribuição ✅ · Venda proibida ❌ · Detalhes: [LICENSE.md](LICENSE.md)

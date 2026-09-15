@@ -20,7 +20,7 @@ The core inverts that: **whoever owns the process answers for it**.
 | Crate | Responsibility |
 |---|---|
 | `crates/core` | Supervisor, and everything that depends on the OS |
-| `crates/engine` | Pawn analysis and LSP *(to migrate)* |
+| `crates/engine` | Pawn analysis and LSP |
 | `crates/debugger` | DAP and the game server *(to migrate)* |
 
 Three crates, and only those: the architectural pieces. Internal
@@ -34,5 +34,6 @@ taking the others down.
 
 ## Status
 
-Under construction. The first migrated subsystem is RCON — see
-[Architecture](architecture.md) and [Supervision](supervision.md).
+Under construction. The core already owns RCON, processes and configuration,
+and hosts the engine on a local socket it supervises. The debugger is still
+missing — see [Architecture](architecture.md) and [Supervision](supervision.md).

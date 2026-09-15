@@ -18,15 +18,48 @@ from an indirect signal, and every signal had a different shape per OS.
 
 ```
 editor ──► extension (TS) ──► pawnpro-core (single binary)
-                                   │
-                                   ├── engine    (crate, supervised task)
-                                   ├── debugger  (crate, supervised task)
-                                   └── rcon      (crate)
-                                           └──► omp-server
+                     │             │
+                     │             ├── engine    (crate, supervised thread)
+                     │             ├── debugger  (crate, supervised thread)
+                     │             └── server    (module: RCON, processes, ports)
+                     │                     └──► omp-server
+                     └──► LSP ──► local socket (Unix) / named pipe (Windows)
 ```
 
-The core exposes LSP and DAP over local sockets, and the extension points its
-clients at them. Whoever owns `omp-server` is now who answers for it.
+The core's JSON-RPC travels over stdio; LSP would not fit in the same channel,
+so the engine listens on a socket of its own. The extension asks for the address
+(`engine.start`, `engine.settings`) and points its client at it. Whoever owns
+`omp-server` is now who answers for it.
+
+**Not TCP on loopback.** LSP authenticates no one, and the engine reads from
+disk whatever path the incoming URI points at: on a local port, any process on
+the machine — under any user — could connect and ask for the contents of any
+file the session owner can read. A Unix socket inside a `0700` directory has the
+filesystem refuse that; on Windows the equivalent is a named pipe.
+
+The address is reserved once and survives the engine's restarts: when it falls
+and the supervisor brings it back, the extension reconnects to the same place
+instead of having to discover it again.
+
+## Who delivers the configuration
+
+The core, and only the core. The engine opens neither `config.json` nor the list
+files: the core reads both scopes, resolves includes, SDK, formatting and
+naming, and delivers the result over an internal channel — a Rust `struct`, not
+a JSON object, because the two compile together and the compiler can enforce the
+agreement.
+
+```
+config.json (global + project)  ──►  core  ──►  typed channel  ──►  engine
+.ban / .allow                        │
+                                     └── polls the timestamps
+```
+
+The core is also who notices the change: it polls the files' timestamps every
+two seconds and re-delivers when one moves. The engine republishes diagnostics
+without the editor asking. This used to be the extension's job, watching the
+files and sending `workspace/didChangeConfiguration` — the same work the core
+now does, from the side that owns the files.
 
 ## Principles
 
