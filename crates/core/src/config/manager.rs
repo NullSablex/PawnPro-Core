@@ -130,6 +130,99 @@ fn substitute_workspace(value: &mut Value, workspace_root: &str) {
     }
 }
 
+/// Grava `value` num caminho pontuado já validado, criando os objetos
+/// intermediários.
+///
+/// Um segmento que não é objeto é substituído: o caminho pedido tem
+/// precedência sobre um valor de tipo incompatível.
+fn insert_at(root: &mut Map<String, Value>, dot_path: &str, value: Value) {
+    let parts: Vec<&str> = dot_path.split('.').collect();
+    let Some((leaf, branches)) = parts.split_last() else {
+        return;
+    };
+    let mut cursor = root;
+    for key in branches {
+        let entry = cursor
+            .entry((*key).to_string())
+            .or_insert_with(|| Value::Object(Map::new()));
+        if !entry.is_object() {
+            *entry = Value::Object(Map::new());
+        }
+        let Some(next) = entry.as_object_mut() else {
+            return;
+        };
+        cursor = next;
+    }
+    cursor.insert((*leaf).to_string(), value);
+}
+
+/// O caminho de uma chave como ponteiro JSON (RFC 6901).
+fn json_pointer(path: &[String]) -> String {
+    path.iter().fold(String::new(), |mut acc, key| {
+        acc.push('/');
+        acc.push_str(&key.replace('~', "~0").replace('/', "~1"));
+        acc
+    })
+}
+
+/// Aplica `overlay` sobre `root` folha por folha, recusando cada valor que
+/// não caiba no tipo.
+///
+/// Desserializar a árvore inteira de uma vez faria um único `"locale": 5`
+/// descartar toda a configuração — includes, SDK, naming — em silêncio. Aqui o
+/// valor errado volta ao padrão e os outros continuam valendo.
+fn merge_leniently(
+    root: &mut Value,
+    path: &mut Vec<String>,
+    overlay: &Map<String, Value>,
+    rejected: &mut Vec<String>,
+) {
+    for (key, incoming) in overlay {
+        path.push(key.clone());
+        let pointer = json_pointer(path);
+        match (root.pointer(&pointer).cloned(), incoming) {
+            (Some(Value::Object(_)), Value::Object(nested)) => {
+                merge_leniently(root, path, nested, rejected);
+            }
+            (Some(previous), _) => {
+                if let Some(slot) = root.pointer_mut(&pointer) {
+                    *slot = incoming.clone();
+                }
+                if serde_json::from_value::<PawnProConfig>(root.clone()).is_err() {
+                    if let Some(slot) = root.pointer_mut(&pointer) {
+                        *slot = previous;
+                    }
+                    rejected.push(path.join("."));
+                }
+            }
+            // Chave que a configuração não conhece: o `serde` a ignoraria de
+            // qualquer forma.
+            (None, _) => {}
+        }
+        path.pop();
+    }
+}
+
+/// Monta a configuração a partir do JSON já mesclado, tolerando valores de
+/// tipo errado. Devolve também as chaves recusadas.
+fn lenient_config(
+    merged: &Map<String, Value>,
+    workspace_root: &str,
+) -> (PawnProConfig, Vec<String>) {
+    let Ok(mut root) = serde_json::to_value(PawnProConfig::default()) else {
+        return (PawnProConfig::default(), Vec::new());
+    };
+    let mut rejected = Vec::new();
+    merge_leniently(&mut root, &mut Vec::new(), merged, &mut rejected);
+    // Depois da mescla, e não antes: os padrões também usam
+    // `${workspaceFolder}`. Resolver só o que o usuário escreveu deixava
+    // `server.cwd`, os includes e os arquivos de lista padrão com o texto
+    // literal — e o `.ban` acabava criado num caminho relativo sem sentido.
+    substitute_workspace(&mut root, workspace_root);
+    let config = serde_json::from_value(root).unwrap_or_default();
+    (config, rejected)
+}
+
 /// Lê, mescla e grava a configuração de um projeto.
 #[derive(Debug)]
 pub struct ConfigManager {
@@ -143,6 +236,8 @@ pub struct ConfigManager {
     raw_global: Map<String, Value>,
     raw_project: Map<String, Value>,
     merged: PawnProConfig,
+    /// Chaves cujo valor tinha o tipo errado e ficaram no padrão.
+    rejected: Vec<String>,
 }
 
 impl ConfigManager {
@@ -156,9 +251,16 @@ impl ConfigManager {
             raw_global: Map::new(),
             raw_project: Map::new(),
             merged: PawnProConfig::default(),
+            rejected: Vec::new(),
         };
         manager.reload();
         manager
+    }
+
+    /// A pasta do projeto, que resolve `${workspaceFolder}`.
+    #[must_use]
+    pub fn project_root(&self) -> &Path {
+        &self.project_root
     }
 
     #[must_use]
@@ -182,16 +284,27 @@ impl ConfigManager {
         let mut merged = self.raw_global.clone();
         deep_merge(&mut merged, &self.raw_project);
 
-        let mut value = Value::Object(merged);
-        substitute_workspace(&mut value, &self.project_root.to_string_lossy());
-
-        // Um arquivo inválido não pode derrubar a extensão: cai nos padrões.
-        self.merged = serde_json::from_value(value).unwrap_or_default();
+        let (config, rejected) = lenient_config(&merged, &self.project_root.to_string_lossy());
+        if !rejected.is_empty() {
+            crate::diag_warn!(
+                "core/config",
+                "valor de tipo inválido ignorado, ficou o padrão: {}",
+                rejected.join(", ")
+            );
+        }
+        self.merged = config;
+        self.rejected = rejected;
     }
 
     #[must_use]
     pub fn get_all(&self) -> &PawnProConfig {
         &self.merged
+    }
+
+    /// As chaves cujo valor tinha o tipo errado e ficaram no padrão.
+    #[must_use]
+    pub fn rejected_keys(&self) -> &[String] {
+        &self.rejected
     }
 
     /// O JSON bruto de um escopo, sem defaults nem substituições.
@@ -246,37 +359,34 @@ impl ConfigManager {
         value: Value,
         scope: Scope,
     ) -> Result<(), ConfigError> {
-        let parts: Vec<&str> = dot_path.split('.').collect();
-        if parts.iter().any(|p| p.is_empty()) {
-            return Err(ConfigError::InvalidKey {
-                path: dot_path.to_string(),
-            });
+        self.set_keys(&[(dot_path.to_string(), value)], scope)
+    }
+
+    /// Grava vários valores numa escrita só.
+    ///
+    /// Uma escrita por chave avisaria quem observa uma vez por chave, com
+    /// estados intermediários que ninguém pediu.
+    ///
+    /// # Errors
+    /// Algum caminho vazio ou com segmento vazio — e então nada é gravado —,
+    /// ou falha de escrita.
+    pub fn set_keys(
+        &mut self,
+        entries: &[(String, Value)],
+        scope: Scope,
+    ) -> Result<(), ConfigError> {
+        if let Some((bad, _)) = entries
+            .iter()
+            .find(|(dot_path, _)| dot_path.split('.').any(str::is_empty))
+        {
+            return Err(ConfigError::InvalidKey { path: bad.clone() });
         }
 
         let path = self.path_for(scope).to_path_buf();
         let mut current = read_json_object(&path);
-
-        let Some((leaf, branches)) = parts.split_last() else {
-            return Err(ConfigError::InvalidKey {
-                path: dot_path.to_string(),
-            });
-        };
-        let mut cursor = &mut current;
-        for key in branches {
-            let entry = cursor
-                .entry((*key).to_string())
-                .or_insert_with(|| Value::Object(Map::new()));
-            if !entry.is_object() {
-                *entry = Value::Object(Map::new());
-            }
-            let Some(next) = entry.as_object_mut() else {
-                return Err(ConfigError::InvalidKey {
-                    path: dot_path.to_string(),
-                });
-            };
-            cursor = next;
+        for (dot_path, value) in entries {
+            insert_at(&mut current, dot_path, value.clone());
         }
-        cursor.insert((*leaf).to_string(), value);
 
         write_json_object(&path, &current)?;
         self.reload();
@@ -353,6 +463,13 @@ mod tests {
         fn manager(&self) -> ConfigManager {
             ConfigManager::new(&self.0.join("proj"), &self.0.join("home"))
         }
+        /// Os padrões como o manager os entrega: com `${workspaceFolder}`
+        /// resolvido para a pasta do projeto.
+        fn resolved_defaults(&self) -> PawnProConfig {
+            let mut value = serde_json::to_value(PawnProConfig::default()).expect("serializar");
+            substitute_workspace(&mut value, &self.0.join("proj").to_string_lossy());
+            serde_json::from_value(value).expect("desserializar")
+        }
     }
 
     impl Drop for TempDir {
@@ -364,7 +481,22 @@ mod tests {
     #[test]
     fn no_files_yields_the_defaults() {
         let tmp = TempDir::new("empty");
-        assert_eq!(tmp.manager().get_all(), &PawnProConfig::default());
+        assert_eq!(tmp.manager().get_all(), &tmp.resolved_defaults());
+    }
+
+    #[test]
+    fn the_defaults_are_resolved_against_the_project() {
+        // Sem arquivo nenhum, os padrões que citam a pasta do projeto chegam
+        // com ela resolvida — um `cwd` literal `${workspaceFolder}` não existe
+        // no disco.
+        let tmp = TempDir::new("defaults-resolved");
+        let m = tmp.manager();
+        let root = tmp.0.join("proj").display().to_string();
+        let c = m.get_all();
+        assert_eq!(c.server.cwd, root);
+        assert_eq!(c.include_paths, [format!("{root}/pawno/include")]);
+        assert!(c.analysis.naming.blocklist_file.starts_with(&root));
+        assert!(c.analysis.naming.loop_indices_file.starts_with(&root));
     }
 
     #[test]
@@ -425,14 +557,80 @@ mod tests {
         // Um JSON truncado não pode impedir o projeto de abrir.
         let tmp = TempDir::new("broken");
         tmp.write_config("proj", "{ \"compiler\": ");
-        assert_eq!(tmp.manager().get_all(), &PawnProConfig::default());
+        assert_eq!(tmp.manager().get_all(), &tmp.resolved_defaults());
+    }
+
+    #[test]
+    fn a_wrong_type_discards_only_that_field() {
+        // Antes, um único valor errado jogava fora a configuração inteira — a
+        // engine perdia os includes do projeto sem aviso nenhum.
+        let tmp = TempDir::new("wrong-type");
+        tmp.write_config("proj", r#"{"locale":5,"compiler":{"path":"/x"}}"#);
+        let m = tmp.manager();
+        assert_eq!(m.get_all().compiler.path, "/x");
+        assert_eq!(m.get_all().locale, "");
+        assert_eq!(m.rejected_keys(), ["locale"]);
+    }
+
+    #[test]
+    fn an_unknown_enum_value_keeps_the_rest_of_the_block() {
+        let tmp = TempDir::new("bad-enum");
+        tmp.write_config(
+            "proj",
+            r#"{"server":{"output":{"follow":"sempre"},"path":"/srv"}}"#,
+        );
+        let m = tmp.manager();
+        assert_eq!(m.get_all().server.path, "/srv");
+        assert_eq!(
+            m.get_all().server.output.follow,
+            crate::config::types::FollowMode::Visible
+        );
+        assert_eq!(m.rejected_keys(), ["server.output.follow"]);
+    }
+
+    #[test]
+    fn a_section_that_is_not_an_object_is_rejected() {
+        let tmp = TempDir::new("bad-section");
+        tmp.write_config("proj", r#"{"compiler":"x","includePaths":["/inc"]}"#);
+        let m = tmp.manager();
+        assert_eq!(
+            m.get_all().compiler,
+            crate::config::types::CompilerConfig::default()
+        );
+        assert_eq!(m.get_all().include_paths, ["/inc"]);
+        assert_eq!(m.rejected_keys(), ["compiler"]);
+    }
+
+    #[test]
+    fn a_list_with_a_bad_element_falls_back_whole() {
+        // Aproveitar só os elementos bons daria uma lista que ninguém escreveu.
+        let tmp = TempDir::new("bad-list");
+        tmp.write_config("proj", r#"{"includePaths":["/a",1]}"#);
+        let m = tmp.manager();
+        assert_eq!(
+            m.get_all().include_paths,
+            tmp.resolved_defaults().include_paths
+        );
+        assert_eq!(m.rejected_keys(), ["includePaths"]);
+    }
+
+    #[test]
+    fn a_valid_file_rejects_nothing() {
+        let tmp = TempDir::new("valid");
+        tmp.write_config(
+            "proj",
+            r#"{"locale":"ru","analysis":{"naming":{"style":{"functions":["camelCase","/^PP_/"]}}}}"#,
+        );
+        let m = tmp.manager();
+        assert!(m.rejected_keys().is_empty());
+        assert_eq!(m.get_all().analysis.naming.style.functions.len(), 2);
     }
 
     #[test]
     fn a_json_that_is_not_an_object_is_ignored() {
         let tmp = TempDir::new("notobj");
         tmp.write_config("proj", "[1,2,3]");
-        assert_eq!(tmp.manager().get_all(), &PawnProConfig::default());
+        assert_eq!(tmp.manager().get_all(), &tmp.resolved_defaults());
     }
 
     #[test]
@@ -442,7 +640,7 @@ mod tests {
         let mut m = tmp.manager();
         m.set_key("__proto__.x", json!(1), Scope::Project)
             .expect("gravar");
-        assert_eq!(m.get_all(), &PawnProConfig::default());
+        assert_eq!(m.get_all(), &tmp.resolved_defaults());
         assert!(m.raw(Scope::Project).contains_key("__proto__"));
     }
 
@@ -499,6 +697,39 @@ mod tests {
         m.set_key("server.path", json!("/x"), Scope::Project)
             .expect("gravar");
         assert_eq!(m.get_all().server.path, "/x");
+    }
+
+    #[test]
+    fn set_keys_writes_everything_at_once() {
+        let tmp = TempDir::new("setkeys");
+        let mut m = tmp.manager();
+        m.set_keys(
+            &[
+                ("syntax.scheme".to_string(), json!("classic_dark")),
+                ("syntax.applyOnStartup".to_string(), json!(true)),
+            ],
+            Scope::Project,
+        )
+        .expect("gravar");
+        assert!(m.get_all().syntax.apply_on_startup);
+        assert_eq!(m.raw(Scope::Project)["syntax"]["scheme"], "classic_dark");
+    }
+
+    #[test]
+    fn one_bad_key_writes_nothing() {
+        // Metade gravada seria pior que nada: o usuário veria só parte do que
+        // pediu, sem saber qual.
+        let tmp = TempDir::new("setkeys-bad");
+        let mut m = tmp.manager();
+        let result = m.set_keys(
+            &[
+                ("locale".to_string(), json!("ru")),
+                ("a..b".to_string(), json!(1)),
+            ],
+            Scope::Project,
+        );
+        assert!(result.is_err());
+        assert!(!m.raw(Scope::Project).contains_key("locale"));
     }
 
     #[test]

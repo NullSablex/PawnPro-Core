@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::config::PAWNPRO_DIR;
+use crate::config::{PAWNPRO_DIR, PawnProConfig};
 
 /// Subpastas de include, na ordem em que o compilador as procura.
 const INCLUDE_SUBDIRS: [&str; 3] = ["qawno/include", "pawno/include", "include"];
@@ -22,6 +22,7 @@ const IGNORED_DIRS: [&str; 3] = ["node_modules", ".git", ".vscode"];
 
 /// Uma função nativa declarada num `.inc`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NativeEntry {
     pub name: String,
     /// Os parâmetros como estão escritos, sem os parênteses.
@@ -126,6 +127,21 @@ pub fn build_include_paths(
         .filter(|p| is_dir(p))
         .filter(|p| seen.insert(p.clone()))
         .collect()
+}
+
+/// As raízes de include do projeto, a partir da configuração dele.
+///
+/// É a única montagem: a engine, a compilação e a árvore de includes da
+/// extensão passam por aqui. Cada um repetindo a chamada à mão abria espaço
+/// para a compilação procurar num lugar e a análise em outro.
+#[must_use]
+pub fn include_paths_for(
+    cfg: &PawnProConfig,
+    workspace_root: &Path,
+    file_dir: Option<&Path>,
+) -> Vec<PathBuf> {
+    let configured: Vec<PathBuf> = cfg.include_paths.iter().map(PathBuf::from).collect();
+    build_include_paths(&configured, &cfg.compiler.args, workspace_root, file_dir)
 }
 
 /// Lista recursivamente os `.inc` sob `root`.

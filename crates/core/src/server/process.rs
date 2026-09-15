@@ -287,8 +287,13 @@ mod tests {
             return;
         };
         let pid = Pid::from_u32(child.id());
-        // Espera o processo terminar SEM colhê-lo: vira zumbi.
-        std::thread::sleep(Duration::from_millis(300));
+        // Espera o processo terminar SEM colhê-lo: vira zumbi. Com prazo fixo
+        // este teste falhava de vez em quando — sob carga, 300 ms podiam não
+        // bastar para o filho morrer, e a falha não tinha a ver com zumbis.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while is_alive(pid) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
         assert!(!is_alive(pid), "zumbi contado como vivo");
         let _ = child.wait();
     }

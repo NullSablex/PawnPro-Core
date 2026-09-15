@@ -5,8 +5,43 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ui::accent::AccentColor;
-use crate::ui::themes::Scheme;
+/// Cor de destaque das páginas da extensão.
+///
+/// Só a validação mora aqui: o CSS que a cor gera é da extensão, que desenha
+/// as páginas. Fechado para um valor livre não virar CSS sem contraste.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AccentColor {
+    /// Segue o tema do editor (o `''` da configuração).
+    #[serde(rename = "")]
+    #[default]
+    Auto,
+    Blue,
+    Purple,
+    Green,
+    Amber,
+    Pink,
+    Teal,
+}
+
+/// Esquema de realce de sintaxe.
+///
+/// Só a validação mora aqui: aplicar o esquema é da extensão, que lê os
+/// arquivos de tema que ela mesma distribui.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scheme {
+    /// Segue o tema do editor.
+    Auto,
+    ClassicWhite,
+    ModernWhite,
+    ClassicDark,
+    ModernDark,
+    /// Sem realce próprio. É o padrão: a extensão não mexe nas cores do
+    /// editor sem o usuário pedir.
+    #[default]
+    None,
+}
 
 /// Codificação padrão da saída do `pawncc` e do log do servidor.
 ///
@@ -201,6 +236,34 @@ pub enum NameCase {
     Custom(String),
 }
 
+impl NameCaseBuiltin {
+    /// O texto que a engine reconhece.
+    ///
+    /// É o mesmo do `serde(rename)` logo acima — duas listas que precisam
+    /// concordar. `the_builtin_names_match_what_is_stored` guarda isso.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::CamelCase => "camelCase",
+            Self::SnakeCase => "snake_case",
+            Self::PascalCase => "PascalCase",
+            Self::UpperCase => "UPPER_CASE",
+            Self::CapitalizedSnake => "Capitalized_Snake",
+        }
+    }
+}
+
+impl NameCase {
+    /// O estilo como a engine o lê: o nome do embutido, ou a regex do usuário.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Builtin(builtin) => builtin.as_str(),
+            Self::Custom(pattern) => pattern,
+        }
+    }
+}
+
 /// Estilos aceitos por categoria.
 ///
 /// Um nome passa se casar com QUALQUER estilo da lista; lista vazia desliga a
@@ -331,6 +394,28 @@ pub struct PawnProConfig {
     pub format: FormatConfig,
     /// Idioma da engine e do depurador. Vazio segue o editor.
     pub locale: String,
+    pub diagnostics: DiagnosticsConfig,
+}
+
+/// Registro de diagnóstico em arquivo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DiagnosticsConfig {
+    /// `off` (padrão), `error`, `warn` ou `info`.
+    ///
+    /// Fica como texto, e não como o `enum` do módulo, porque a configuração é
+    /// escrita à mão e um valor inválido não pode impedir o resto de carregar.
+    pub level: String,
+}
+
+impl Default for DiagnosticsConfig {
+    /// `off` por extenso, e não o texto vazio do `derive`: é o valor que a
+    /// página de configurações mostra e que a extensão sempre usou.
+    fn default() -> Self {
+        Self {
+            level: "off".to_string(),
+        }
+    }
 }
 
 impl Default for PawnProConfig {
@@ -346,6 +431,7 @@ impl Default for PawnProConfig {
             analysis: AnalysisConfig::default(),
             format: FormatConfig::default(),
             locale: String::new(),
+            diagnostics: DiagnosticsConfig::default(),
         }
     }
 }
@@ -378,6 +464,7 @@ mod tests {
         assert!(c.format.empty_block_same_line);
         assert!(!c.format.preserve_array_alignment);
         assert_eq!(c.locale, "");
+        assert_eq!(c.diagnostics.level, "off");
     }
 
     #[test]
@@ -499,5 +586,21 @@ mod real_files {
             assert!(cfg.ui.show_include_paths, "perdeu ui.showIncludePaths");
         }
         assert_eq!(cfg.output.encoding, "windows1252", "perdeu o default");
+    }
+
+    #[test]
+    fn the_builtin_names_match_what_is_stored() {
+        // O `as_str` alimenta a engine e o `serde(rename)` alimenta o arquivo:
+        // divergirem faria a engine checar um estilo diferente do configurado.
+        for builtin in [
+            NameCaseBuiltin::CamelCase,
+            NameCaseBuiltin::SnakeCase,
+            NameCaseBuiltin::PascalCase,
+            NameCaseBuiltin::UpperCase,
+            NameCaseBuiltin::CapitalizedSnake,
+        ] {
+            let stored = serde_json::to_value(builtin).expect("serializar");
+            assert_eq!(stored, builtin.as_str(), "{builtin:?}");
+        }
     }
 }

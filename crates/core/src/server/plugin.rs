@@ -50,6 +50,13 @@ pub struct ArchMismatch {
 }
 
 /// O que está pronto e o que falta para depurar.
+///
+/// Os quatro bools codificam um estado só, com combinações impossíveis —
+/// `plugin_file_present` e `plugin_name_clash` nunca são ambos `true`. Um enum
+/// diria isso melhor, mas a struct é o contrato com a extensão, que lê os
+/// campos separados: a troca fica para quando o TypeScript que a consome
+/// migrar.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DebugPreflight {

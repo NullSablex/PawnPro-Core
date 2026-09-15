@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use super::flags::Supported;
 
 /// Argumentos prontos para invocar o compilador.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompileArgs {
     pub exe: PathBuf,
     pub args: Vec<String>,
@@ -22,6 +23,7 @@ pub struct CompileArgs {
 
 /// Resultado de uma compilação.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompileResult {
     /// `None` quando o processo morreu por sinal.
     pub exit_code: Option<i32>,

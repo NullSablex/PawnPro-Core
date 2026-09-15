@@ -8,7 +8,7 @@
 
 use std::io::{BufReader, stdin, stdout};
 
-use pawnpro_core::rpc::{Sender, serve};
+use pawnpro_core::rpc::{Sender, Services, serve};
 
 fn main() -> std::io::Result<()> {
     let sender = Sender::new(Box::new(stdout()));
@@ -24,7 +24,16 @@ fn main() -> std::io::Result<()> {
         );
     }));
 
+    // A engine só sobe quando a extensão pedir: criar o soquete na partida
+    // gastaria um em cada janela que nem chega a usar o LSP.
+    let services = Services::new(&sender);
+
     // O laço termina quando o stdin fecha, que é como a extensão encerra o
     // core: fechar o canal, em vez de matar o processo.
-    serve(BufReader::new(stdin().lock()), &sender)
+    let result = serve(BufReader::new(stdin().lock()), &sender, &services);
+
+    // Fechar o canal encerra o core; o `Drop` da engine para a thread e apaga
+    // o soquete, que senão sobreviveria ao processo.
+    drop(services);
+    result
 }

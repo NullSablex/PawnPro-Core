@@ -3,7 +3,7 @@
 //! A tradução de parâmetros acontece só aqui: o resto do crate não sabe que
 //! existe RPC.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -157,28 +157,6 @@ pub fn dispatch(method: &str, params: &Value) -> Result<Value, ResponseError> {
             Ok(json!(server::plugin::check_debug_plugin(&cwd)))
         }
 
-        // --- compilador ---
-        "compiler.detect" => {
-            let configured = params.get("path").and_then(Value::as_str);
-            let auto = params
-                .get("autoDetect")
-                .and_then(Value::as_bool)
-                .unwrap_or(true);
-            let root = params
-                .get("workspaceRoot")
-                .and_then(Value::as_str)
-                .map(Path::new);
-            crate::compiler::detect::detect_pawncc(configured, auto, root)
-                .map(|p| json!(p))
-                .map_err(|e| ResponseError::internal(&e.to_string()))
-        }
-
-        // --- includes ---
-        "includes.listNatives" => {
-            let file = path_field(params, "file")?;
-            Ok(json!(crate::project::includes::list_natives(&file)))
-        }
-
         _ => Err(ResponseError::method_not_found(method)),
     }
 }
@@ -197,7 +175,5 @@ pub fn method_names() -> Vec<&'static str> {
         "server.ping",
         "rcon.send",
         "debug.preflight",
-        "compiler.detect",
-        "includes.listNatives",
     ]
 }

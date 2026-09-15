@@ -27,8 +27,16 @@ pub fn list_file_header(title: &str) -> String {
 }
 
 /// Os termos de um arquivo de lista, sem comentários nem linhas vazias.
+///
+/// Vazio quando o arquivo não existe, não é legível, ou passa de `max_bytes` —
+/// o limite não restringe o que o desenvolvedor escreve, impede o core de
+/// carregar na memória um arquivo absurdo. Era a engine quem lia isto; ela não
+/// lê mais nada do disco.
 #[must_use]
-pub fn read_list_file(path: &Path) -> Vec<String> {
+pub fn read_list_file(path: &Path, max_bytes: u64) -> Vec<String> {
+    if std::fs::metadata(path).is_ok_and(|m| m.len() > max_bytes) {
+        return Vec::new();
+    }
     std::fs::read_to_string(path)
         .map(|text| {
             text.lines()
@@ -208,6 +216,9 @@ pub fn migrate_naming_lists(
 
 #[cfg(test)]
 mod tests {
+    /// Limite usado nos testes que não estão medindo o limite.
+    const LIST_LIMIT: u64 = 32 * 1024 * 1024;
+
     use super::*;
 
     struct TempDir(PathBuf);
@@ -256,7 +267,7 @@ mod tests {
         let tmp = TempDir::new("read");
         let path = tmp.0.join("lista.ban");
         std::fs::write(&path, "# comentário\n\n  termo1  \ntermo2\n").expect("escrever");
-        assert_eq!(read_list_file(&path), ["termo1", "termo2"]);
+        assert_eq!(read_list_file(&path, LIST_LIMIT), ["termo1", "termo2"]);
     }
 
     #[test]
@@ -267,7 +278,7 @@ mod tests {
         let path = tmp.0.join("lista.ban");
         std::fs::write(&path, "meu-termo\n").expect("escrever");
         seed_list_file(&path, BLOCKLIST_TITLE, &items(&["outro"]));
-        assert_eq!(read_list_file(&path), ["meu-termo"]);
+        assert_eq!(read_list_file(&path, LIST_LIMIT), ["meu-termo"]);
     }
 
     #[test]
@@ -275,7 +286,7 @@ mod tests {
         let tmp = TempDir::new("seed-new");
         let path = tmp.0.join("sub").join("lista.ban");
         seed_list_file(&path, BLOCKLIST_TITLE, &items(&["tmp", "foo"]));
-        assert_eq!(read_list_file(&path), ["tmp", "foo"]);
+        assert_eq!(read_list_file(&path, LIST_LIMIT), ["tmp", "foo"]);
         let raw = std::fs::read_to_string(&path).expect("ler");
         assert!(raw.starts_with("# PawnPro"));
     }
@@ -287,7 +298,7 @@ mod tests {
         let path = tmp.0.join("lista.ban");
         std::fs::write(&path, "# cabeçalho\nmeu-termo\n").expect("escrever");
         append_list_file(&path, BLOCKLIST_TITLE, &items(&["novo"]));
-        assert_eq!(read_list_file(&path), ["meu-termo", "novo"]);
+        assert_eq!(read_list_file(&path, LIST_LIMIT), ["meu-termo", "novo"]);
     }
 
     #[test]
@@ -296,7 +307,7 @@ mod tests {
         let path = tmp.0.join("lista.ban");
         std::fs::write(&path, "termo\n").expect("escrever");
         append_list_file(&path, BLOCKLIST_TITLE, &items(&["termo", "outro"]));
-        assert_eq!(read_list_file(&path), ["termo", "outro"]);
+        assert_eq!(read_list_file(&path, LIST_LIMIT), ["termo", "outro"]);
     }
 
     #[test]
@@ -313,7 +324,7 @@ mod tests {
 
         let result = migrate_naming_lists(&mut manager).expect("migrar");
         assert_eq!(result.blocklist, 2);
-        assert_eq!(read_list_file(&ban), ["x", "y"]);
+        assert_eq!(read_list_file(&ban, LIST_LIMIT), ["x", "y"]);
         // O arquivo passa a ser a fonte única: o inline sai do JSON.
         assert!(!has_inline_naming_lists(&manager));
     }
@@ -332,7 +343,7 @@ mod tests {
         migrate_naming_lists(&mut manager).expect("migrar");
         let second = migrate_naming_lists(&mut manager).expect("migrar de novo");
         assert_eq!(second.blocklist, 0);
-        assert_eq!(read_list_file(&ban), ["x"]);
+        assert_eq!(read_list_file(&ban, LIST_LIMIT), ["x"]);
     }
 
     #[test]
@@ -378,5 +389,16 @@ mod tests {
         );
         let manager = tmp.manager();
         assert_eq!(inline_naming_bytes(&manager), 5);
+    }
+
+    #[test]
+    fn an_oversized_list_is_refused_instead_of_loaded() {
+        // O limite existe para o core não carregar na memória um arquivo
+        // absurdo; a lista cai no que estiver escrito na configuração.
+        let tmp = TempDir::new("oversized");
+        let path = tmp.0.join("nomes.ban");
+        std::fs::write(&path, "termo\noutro\n").expect("escrever");
+        assert!(read_list_file(&path, 4).is_empty());
+        assert_eq!(read_list_file(&path, 4096), ["termo", "outro"]);
     }
 }

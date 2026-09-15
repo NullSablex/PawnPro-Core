@@ -5,8 +5,8 @@
 
 pub mod compiler;
 pub mod config;
+pub mod diagnostics;
 pub mod project;
 pub mod rpc;
 pub mod server;
 pub mod supervisor;
-pub mod ui;

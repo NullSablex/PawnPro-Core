@@ -184,11 +184,21 @@ fn supervise<F>(
         let count = restarts.fetch_add(1, Ordering::Relaxed) + 1;
         if count > MAX_RESTARTS {
             // Insistir esconderia o problema.
+            crate::diag_error!(
+                "core/supervisor",
+                "{} desistiu depois de {count} quedas",
+                subsystem.name()
+            );
             notify(sender, subsystem, Health::Failed, count);
             return;
         }
 
-        let _ = panicked;
+        crate::diag_warn!(
+            "core/supervisor",
+            "{} caiu ({}) e vai subir de novo; queda {count}",
+            subsystem.name(),
+            if panicked { "panic" } else { "retornou" }
+        );
         notify(sender, subsystem, Health::Restarting, count);
         std::thread::sleep(RESTART_DELAY);
     }
@@ -251,6 +261,22 @@ mod tests {
         false
     }
 
+    /// Espera uma condição virar verdadeira, ou desiste.
+    ///
+    /// As notificações são enviadas **antes** do trabalho começar — `Running`
+    /// sai e só então `work` é chamado. Conferir um efeito logo depois de ver
+    /// a notificação é uma corrida que o CI perde de vez em quando.
+    fn wait_until(condition: impl Fn() -> bool) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if condition() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
     #[test]
     fn a_panic_becomes_a_restart_instead_of_a_crash() {
         // O ponto do supervisor: um subsistema que explode não leva o processo
@@ -268,11 +294,14 @@ mod tests {
         .expect("criar thread");
 
         assert!(wait_for(&rx, "restarting"), "não avisou o reinício");
-        // Espera a SEGUNDA tentativa entrar em `running`: parar antes disso
-        // encerraria o laço no meio do intervalo de reinício.
-        assert!(wait_for(&rx, "running"), "não subiu de novo");
+        // Espera a SEGUNDA tentativa começar de fato. Parar antes encerraria o
+        // laço no meio do intervalo de reinício, e conferir o contador logo
+        // após a notificação de `running` chegaria antes de `work` rodar.
+        assert!(
+            wait_until(|| attempts.load(Ordering::Relaxed) >= 2),
+            "não tentou de novo"
+        );
         sup.stop();
-        assert!(attempts.load(Ordering::Relaxed) >= 2, "não tentou de novo");
     }
 
     #[test]
@@ -325,7 +354,10 @@ mod tests {
         .expect("criar thread");
 
         assert!(wait_for(&rx, "failed"), "o quebrado não desistiu");
-        assert!(alive.load(Ordering::Relaxed), "o saudável não subiu");
+        assert!(
+            wait_until(|| alive.load(Ordering::Relaxed)),
+            "o saudável não subiu"
+        );
         assert!(healthy.is_running(), "o saudável foi derrubado junto");
         healthy.stop();
     }

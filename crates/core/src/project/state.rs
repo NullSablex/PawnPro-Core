@@ -90,9 +90,34 @@ impl StateManager {
     }
 }
 
+/// Lê o estado campo a campo.
+///
+/// Desserializar de uma vez faria um `favorites` de tipo errado apagar também
+/// o histórico: cada lista é aproveitada por conta própria, e um item que não
+/// é texto fica de fora.
 fn read_state(path: &Path) -> Option<PawnProState> {
     let raw = fs::read_to_string(path).ok()?;
-    serde_json::from_str(&raw).ok()
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let server = value.get("server");
+    let list = |key: &str| -> Vec<String> {
+        server
+            .and_then(|s| s.get(key))
+            .and_then(serde_json::Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    Some(PawnProState {
+        server: ServerState {
+            favorites: list("favorites"),
+            history: list("history"),
+        },
+    })
 }
 
 /// Garante que `.pawnpro/` tenha um `.gitignore` cobrindo o estado local.
@@ -192,6 +217,22 @@ mod tests {
         fs::write(dir.join("state.json"), "{ \"server\": ").expect("escrever");
         let st = StateManager::new(&tmp.0);
         assert_eq!(st.get_all(), &PawnProState::default());
+    }
+
+    #[test]
+    fn a_bad_list_does_not_erase_the_other() {
+        // Um `favorites` corrompido não pode levar junto o histórico.
+        let tmp = TempDir::new("bad-list");
+        let dir = tmp.0.join(PAWNPRO_DIR);
+        fs::create_dir_all(&dir).expect("criar dir");
+        fs::write(
+            dir.join("state.json"),
+            r#"{"server":{"favorites":5,"history":["players",7,"gmx"]}}"#,
+        )
+        .expect("escrever");
+        let st = StateManager::new(&tmp.0);
+        assert!(st.server().favorites.is_empty());
+        assert_eq!(st.server().history, ["players", "gmx"]);
     }
 
     #[test]
