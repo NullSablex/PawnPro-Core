@@ -1,0 +1,106 @@
+//! Traducere în română (ro). Păstrează marcajele `{}` / `{n}` / `{style}` în
+//! aceeași poziție logică ca în original.
+
+use crate::messages::MsgKey;
+
+// Tabel de traducere: câte o linie per `MsgKey` pentru a ușura localizarea și
+// întreținerea, chiar și când două chei împart același text.
+#[allow(clippy::match_same_arms)]
+pub fn get(key: MsgKey) -> &'static str {
+    match key {
+        MsgKey::IncludeNotFound => "Include negăsit: \"{}\"",
+        MsgKey::IncludeTried => " (s-a încercat și: {}.inc)",
+        MsgKey::IncludeNoPathsConfigured => ". Niciun includePaths configurat.",
+        MsgKey::IncludeSearchedIn => ". S-a căutat în: {}{}",
+        MsgKey::IncludeRelativeTo => ". Cale relativă de la: {}",
+        MsgKey::NativeHasBody => "Funcția native \"{}\" nu poate avea corp",
+        MsgKey::ForwardHasBody => "Declarația forward \"{}\" nu poate avea corp",
+        MsgKey::DeclNoBody => {
+            "Declarația {} \"{}\" nu are corp. Folosește \"forward\" pentru prototipuri."
+        }
+        MsgKey::VarUnused => "variabila \"{}\" declarată dar niciodată folosită",
+        MsgKey::StockUnused => "funcția stock \"{}\" declarată dar niciodată folosită",
+        MsgKey::SymDeprecated => "\"{}\" este învechit",
+        MsgKey::SymDeprecatedUsage => "\"{}\" este învechit",
+        MsgKey::PragmaUnknown => "`#pragma {}` nu există",
+        MsgKey::PragmaUnknownDidYouMean => "`#pragma {}` nu există — folosește `{sug}`",
+        MsgKey::PragmaDeprecatedQuoted => "Mesajul nu ia ghilimele — ar ajunge în text",
+        MsgKey::SymFromDeprecatedFile => "\"{}\" aparține unui include învechit",
+        MsgKey::IncludeDeprecated => "\"{}\" este învechit",
+        MsgKey::ParamUnused => "Parametrul \"{}\" declarat dar niciodată folosit",
+        MsgKey::SymbolUndeclared => {
+            "\"{}\" nu este declarat — verifică dacă include-ul corect este prezent"
+        }
+        MsgKey::DefineUnused => "\"{}\" definit dar niciodată folosit",
+        MsgKey::IncludeNoSymbolsUsed => {
+            "\"{}\" inclus dar niciunul dintre simbolurile sale nu este folosit"
+        }
+        MsgKey::TryIncludeNotFound => "\"{}\" negăsit — #tryinclude ignorat de compilator",
+        MsgKey::NativeNeverCalled => "native \"{}\" declarat dar niciodată apelat",
+        MsgKey::ForwardNeverCalled => "forward \"{}\" declarat dar niciodată apelat",
+        MsgKey::FuncNeverCalled => "funcția \"{}\" declarată dar niciodată apelată",
+        MsgKey::IndentInconsistent => {
+            "Indentare inconsecventă: se așteptau {} coloane, s-au găsit {}"
+        }
+        MsgKey::RefsZero => "0 referințe",
+        MsgKey::RefsOne => "1 referință",
+        MsgKey::RenameShadowed => {
+            "Redenumirea \"{}\" a fost refuzată: numele este și local sau parametru în {}, iar redenumirea după nume ar schimba și acea variabilă."
+        }
+        MsgKey::RefsMany => "{n} referințe",
+        MsgKey::HoverDeprecated => "**Învechit**",
+        MsgKey::HoverParams => "Parametri",
+        MsgKey::HoverReturns => "Returnează:",
+        MsgKey::HoverRemarks => "Note:",
+        MsgKey::KwIf => "if (condiție) { }",
+        MsgKey::KwIfElse => "if/else",
+        MsgKey::KwElse => "else",
+        MsgKey::KwFor => "for (new i = 0; i < n; ++i)",
+        MsgKey::KwWhile => "while (condiție) { }",
+        MsgKey::KwDo => "do { } while (condiție)",
+        MsgKey::KwSwitch => "switch (valoare) { case: }",
+        MsgKey::KwCase => "case valoare:",
+        MsgKey::KwDefault => "default: (switch)",
+        MsgKey::KwReturn => "return valoare",
+        MsgKey::KwBreak => "break — iese din buclă/switch",
+        MsgKey::KwContinue => "continue — următoarea iterație",
+        MsgKey::KwGoto => "goto etichetă",
+        MsgKey::KwExit => "exit — termină scriptul",
+        MsgKey::KwNewLocal => "variabilă locală nouă",
+        MsgKey::KwSizeof => "sizeof variabilă — dimensiune",
+        MsgKey::KwTagof => "tagof variabilă — tag numeric",
+        MsgKey::KwTrue => "true (1)",
+        MsgKey::KwFalse => "false (0)",
+        MsgKey::KwCellmax => "valoarea maximă a celulei",
+        MsgKey::KwCellmin => "valoarea minimă a celulei",
+        MsgKey::KwCellbits => "biți per celulă",
+        MsgKey::KwStock => "funcție stock",
+        MsgKey::KwPublic => "funcție public (callback)",
+        MsgKey::KwForward => "declarație forward",
+        MsgKey::KwNative => "declarație native",
+        MsgKey::KwStatic => "funcție/variabilă static",
+        MsgKey::KwEnum => "declarație enum",
+        MsgKey::KwConst => "constantă globală",
+        MsgKey::KwNewGlobal => "variabilă globală",
+        MsgKey::KwDefine => "macro #define",
+        MsgKey::KwUndef => "macro #undef",
+        MsgKey::KwInclude => "#include <fișier>",
+        MsgKey::KwTryinclude => "#tryinclude <fișier> (dacă există)",
+        MsgKey::KwIfDefined => "#if defined MACRO … #endif",
+        MsgKey::KwIfdef => "#ifdef MACRO … #endif",
+        MsgKey::KwIfndef => "#ifndef MACRO … #endif",
+        MsgKey::KwElseDir => "#else (în interiorul #if)",
+        MsgKey::KwEndif => "#endif",
+        MsgKey::KwPragma => "opțiune #pragma",
+        MsgKey::KwAssert => "#assert condiție (la compilare)",
+        MsgKey::KwError => "mesaj #error (la compilare)",
+        MsgKey::KwWarning => "mesaj #warning (la compilare)",
+        MsgKey::DocTagParam => "Documentează un parametru",
+        MsgKey::DocTagReturn => "Documentează valoarea returnată",
+        MsgKey::DocTagRemarks => "Note suplimentare",
+        MsgKey::KwLocal => "local",
+        MsgKey::NameTooShort => "\"{}\" este foarte scurt — ia în calcul un nume mai descriptiv",
+        MsgKey::NamePlaceholder => "\"{}\" este un nume generic — ia în calcul unul mai descriptiv",
+        MsgKey::NameStyle => "\"{}\" nu respectă convenția {style}",
+    }
+}

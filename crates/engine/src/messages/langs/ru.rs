@@ -1,0 +1,102 @@
+//! Перевод на русский (ru). Сохраняйте маркеры `{}` / `{n}` / `{style}` в той
+//! же логической позиции, что и в оригинале.
+
+use crate::messages::MsgKey;
+
+// Таблица перевода: по одной строке на `MsgKey` для удобства локализации и
+// поддержки, даже когда два ключа используют один и тот же текст.
+#[allow(clippy::match_same_arms)]
+pub fn get(key: MsgKey) -> &'static str {
+    match key {
+        MsgKey::IncludeNotFound => "Include не найден: \"{}\"",
+        MsgKey::IncludeTried => " (также пробовали: {}.inc)",
+        MsgKey::IncludeNoPathsConfigured => ". Пути includePaths не настроены.",
+        MsgKey::IncludeSearchedIn => ". Искали в: {}{}",
+        MsgKey::IncludeRelativeTo => ". Относительный путь от: {}",
+        MsgKey::NativeHasBody => "Функция native \"{}\" не может иметь тело",
+        MsgKey::ForwardHasBody => "Объявление forward \"{}\" не может иметь тело",
+        MsgKey::DeclNoBody => {
+            "Объявление {} \"{}\" не имеет тела. Используйте \"forward\" для прототипов."
+        }
+        MsgKey::VarUnused => "переменная \"{}\" объявлена, но не используется",
+        MsgKey::StockUnused => "stock-функция \"{}\" объявлена, но не используется",
+        MsgKey::SymDeprecated => "\"{}\" устарел",
+        MsgKey::SymDeprecatedUsage => "\"{}\" устарел",
+        MsgKey::PragmaUnknown => "`#pragma {}` не существует",
+        MsgKey::PragmaUnknownDidYouMean => "`#pragma {}` не существует — используйте `{sug}`",
+        MsgKey::PragmaDeprecatedQuoted => "Сообщение пишется без кавычек — они попадут в текст",
+        MsgKey::SymFromDeprecatedFile => "\"{}\" принадлежит устаревшему include",
+        MsgKey::IncludeDeprecated => "\"{}\" устарел",
+        MsgKey::ParamUnused => "Параметр \"{}\" объявлен, но не используется",
+        MsgKey::SymbolUndeclared => "\"{}\" не объявлен — проверьте, что подключён нужный include",
+        MsgKey::DefineUnused => "\"{}\" определён, но не используется",
+        MsgKey::IncludeNoSymbolsUsed => {
+            "\"{}\" подключён, но ни один из его символов не используется"
+        }
+        MsgKey::TryIncludeNotFound => "\"{}\" не найден — #tryinclude проигнорирован компилятором",
+        MsgKey::NativeNeverCalled => "native \"{}\" объявлен, но не вызывается",
+        MsgKey::ForwardNeverCalled => "forward \"{}\" объявлен, но не вызывается",
+        MsgKey::FuncNeverCalled => "функция \"{}\" объявлена, но не вызывается",
+        MsgKey::IndentInconsistent => "Несогласованный отступ: ожидалось {} столбцов, найдено {}",
+        MsgKey::RefsZero => "0 ссылок",
+        MsgKey::RefsOne => "1 ссылка",
+        MsgKey::RenameShadowed => {
+            "Переименование \"{}\" отклонено: это имя также локальная переменная или параметр в {}, и переименование по имени изменило бы и её."
+        }
+        MsgKey::RefsMany => "{n} ссылок",
+        MsgKey::HoverDeprecated => "**Устарело**",
+        MsgKey::HoverParams => "Параметры",
+        MsgKey::HoverReturns => "Возвращает:",
+        MsgKey::HoverRemarks => "Примечания:",
+        MsgKey::KwIf => "if (условие) { }",
+        MsgKey::KwIfElse => "if/else",
+        MsgKey::KwElse => "else",
+        MsgKey::KwFor => "for (new i = 0; i < n; ++i)",
+        MsgKey::KwWhile => "while (условие) { }",
+        MsgKey::KwDo => "do { } while (условие)",
+        MsgKey::KwSwitch => "switch (значение) { case: }",
+        MsgKey::KwCase => "case значение:",
+        MsgKey::KwDefault => "default: (switch)",
+        MsgKey::KwReturn => "return значение",
+        MsgKey::KwBreak => "break — выход из цикла/switch",
+        MsgKey::KwContinue => "continue — следующая итерация",
+        MsgKey::KwGoto => "goto метка",
+        MsgKey::KwExit => "exit — завершить скрипт",
+        MsgKey::KwNewLocal => "новая локальная переменная",
+        MsgKey::KwSizeof => "sizeof переменная — размер",
+        MsgKey::KwTagof => "tagof переменная — числовой тег",
+        MsgKey::KwTrue => "true (1)",
+        MsgKey::KwFalse => "false (0)",
+        MsgKey::KwCellmax => "максимальное значение ячейки",
+        MsgKey::KwCellmin => "минимальное значение ячейки",
+        MsgKey::KwCellbits => "бит на ячейку",
+        MsgKey::KwStock => "stock-функция",
+        MsgKey::KwPublic => "public-функция (callback)",
+        MsgKey::KwForward => "объявление forward",
+        MsgKey::KwNative => "объявление native",
+        MsgKey::KwStatic => "static-функция/переменная",
+        MsgKey::KwEnum => "объявление enum",
+        MsgKey::KwConst => "глобальная константа",
+        MsgKey::KwNewGlobal => "глобальная переменная",
+        MsgKey::KwDefine => "макрос #define",
+        MsgKey::KwUndef => "макрос #undef",
+        MsgKey::KwInclude => "#include <файл>",
+        MsgKey::KwTryinclude => "#tryinclude <файл> (если существует)",
+        MsgKey::KwIfDefined => "#if defined MACRO … #endif",
+        MsgKey::KwIfdef => "#ifdef MACRO … #endif",
+        MsgKey::KwIfndef => "#ifndef MACRO … #endif",
+        MsgKey::KwElseDir => "#else (внутри #if)",
+        MsgKey::KwEndif => "#endif",
+        MsgKey::KwPragma => "опция #pragma",
+        MsgKey::KwAssert => "#assert условие (во время компиляции)",
+        MsgKey::KwError => "сообщение #error (во время компиляции)",
+        MsgKey::KwWarning => "сообщение #warning (во время компиляции)",
+        MsgKey::DocTagParam => "Описывает параметр",
+        MsgKey::DocTagReturn => "Описывает возвращаемое значение",
+        MsgKey::DocTagRemarks => "Дополнительные заметки",
+        MsgKey::KwLocal => "локальная",
+        MsgKey::NameTooShort => "\"{}\" очень короткое — стоит выбрать более описательное имя",
+        MsgKey::NamePlaceholder => "\"{}\" — общее имя — стоит выбрать более описательное",
+        MsgKey::NameStyle => "\"{}\" не следует соглашению {style}",
+    }
+}

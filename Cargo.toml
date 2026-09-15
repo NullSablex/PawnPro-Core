@@ -1,11 +1,8 @@
 [workspace]
 resolver = "3"
-# Três peças, e só elas: o supervisor e os dois subsistemas que ele comanda.
-# Responsabilidades internas (RCON, processos, portas) são módulos da crate a
-# que pertencem — não crates próprias, que só multiplicariam fronteiras sem
-# separar nada de verdade.
 members = [
     "crates/core",
+    "crates/engine",
 ]
 
 [workspace.package]
@@ -17,22 +14,13 @@ repository = "https://github.com/NullSablex/PawnPro-Core"
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Mesma versão que a engine usa, para não duplicar a crate quando ela vier.
 regex = "1"
-# Saída do pawncc vem em windows-1252 na maioria das builds; o `encoding_rs`
-# é o equivalente ao `iconv-lite` que a extensão usava.
 encoding_rs = "0.8"
-# Inspeção de processos multiplataforma: substitui os caminhos por SO que a
-# extensão mantinha à mão (`/proc`, `ps`, `Get-Process`, `taskkill`).
-sysinfo = { version = "0.33", default-features = false, features = ["system"] }
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+interprocess = "2"
+tokio = "1.53"
 
-# O binário é distribuído dentro do VSIX: tamanho importa mais que tempo de
-# build. `lto` e `codegen-units = 1` custam compilação, não execução.
 [profile.release]
 lto = true
 codegen-units = 1
 strip = true
-# SEM `panic = "abort"`: o core supervisiona a engine e o depurador, e um panic
-# num deles precisa derrubar só aquele subsistema. Com `abort` não há unwind, o
-# `catch_unwind` da borda não pega nada, e o processo inteiro morre — o oposto
-# do que o supervisor existe para fazer.

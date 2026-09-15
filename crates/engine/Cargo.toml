@@ -1,5 +1,5 @@
 [package]
-name = "pawnpro-core"
+name = "pawnpro-engine"
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true
@@ -9,7 +9,8 @@ repository.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex = { workspace = true }
-encoding_rs = { workspace = true }
-sysinfo = { workspace = true }
-pawnpro-engine = { path = "../engine" }
-tokio = { workspace = true, features = ["rt-multi-thread", "net", "time"] }
+tower-lsp = "0.20"
+tokio = { workspace = true, features = ["full"] }
+walkdir = "2"
+dashmap = "6"
+futures = "0.3"
