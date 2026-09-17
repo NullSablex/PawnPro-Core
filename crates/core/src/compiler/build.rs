@@ -189,14 +189,31 @@ pub fn run_compile(
 /// transformaria acentos em lixo no meio das mensagens de erro.
 #[must_use]
 pub fn decode_output(bytes: &[u8], encoding: &str) -> String {
-    let label = if encoding.is_empty() {
-        "windows-1252"
-    } else {
-        encoding
-    };
-    let enc =
-        encoding_rs::Encoding::for_label(label.as_bytes()).unwrap_or(encoding_rs::WINDOWS_1252);
-    enc.decode(bytes).0.into_owned()
+    encoding_for(encoding).decode(bytes).0.into_owned()
+}
+
+/// A codificação que um nome da configuração designa.
+///
+/// A configuração grava os nomes sem hífen (`windows1251`), como o seletor da
+/// extensão os oferece; o `encoding_rs` só reconhece os rótulos do WHATWG
+/// (`windows-1251`, `cp1251`). Sem a tradução, toda página de código além da
+/// 1252 caía em silêncio no padrão, e um log em cirílico saía corrompido.
+///
+/// `latin1` é, pelo WHATWG, windows-1252: as duas só diferem de `0x80` a
+/// `0x9F`, que no ISO-8859-1 são caracteres de controle.
+fn encoding_for(name: &str) -> &'static encoding_rs::Encoding {
+    let name = name.trim();
+    if name.is_empty() {
+        return encoding_rs::WINDOWS_1252;
+    }
+    if let Some(enc) = encoding_rs::Encoding::for_label(name.as_bytes()) {
+        return enc;
+    }
+    name.get(.."windows".len())
+        .filter(|prefix| prefix.eq_ignore_ascii_case("windows"))
+        .map(|_| format!("windows-{}", &name["windows".len()..]))
+        .and_then(|label| encoding_rs::Encoding::for_label(label.as_bytes()))
+        .unwrap_or(encoding_rs::WINDOWS_1252)
 }
 
 #[cfg(test)]
@@ -337,6 +354,33 @@ mod tests {
         // Os mesmos bytes em UTF-8 são a sequência de `ç`.
         let bytes = [b'a', 0xC3, 0xA7, b'a', b'o'];
         assert_eq!(decode_output(&bytes, "utf-8"), "açao");
+    }
+
+    #[test]
+    fn every_encoding_the_settings_page_offers_is_recognized() {
+        // Os valores do seletor em `settingsView.ts`. Cada um tem de chegar à
+        // página de código que nomeia — não ao padrão por acaso.
+        let expected = [
+            ("utf8", encoding_rs::UTF_8),
+            ("windows1250", encoding_rs::WINDOWS_1250),
+            ("windows1251", encoding_rs::WINDOWS_1251),
+            ("windows1252", encoding_rs::WINDOWS_1252),
+            ("windows1253", encoding_rs::WINDOWS_1253),
+            ("windows1254", encoding_rs::WINDOWS_1254),
+            ("windows1255", encoding_rs::WINDOWS_1255),
+            ("windows1256", encoding_rs::WINDOWS_1256),
+            ("windows1257", encoding_rs::WINDOWS_1257),
+            ("latin1", encoding_rs::WINDOWS_1252),
+        ];
+        for (name, encoding) in expected {
+            assert_eq!(encoding_for(name), encoding, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_cyrillic_log_is_decoded_as_cyrillic() {
+        // 0xCF 0xF0 0xE8 em windows-1251 é "При"; caindo no 1252 viraria "Ïðè".
+        assert_eq!(decode_output(&[0xCF, 0xF0, 0xE8], "windows1251"), "При");
     }
 
     #[test]
