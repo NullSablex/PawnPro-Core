@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ matrix.target }}
 
@@ -50,7 +50,7 @@ jobs:
         if: ${{ matrix.xwin }}
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends clang llvm
-          cargo install cargo-xwin --locked
+          cargo install cargo-xwin --version 0.23.1 --locked
 
       - name: Build plugin (Linux)
         if: ${{ !matrix.xwin }}
@@ -87,7 +87,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       - name: Install cargo-about
         run: cargo install cargo-about --version 0.9.2 --features cli --locked
@@ -147,7 +147,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ matrix.target }}
 
@@ -162,7 +162,7 @@ jobs:
 
       - name: Install cross (Linux arm64)
         if: matrix.use_cross
-        run: cargo install cross --locked
+        run: cargo install cross --version 0.2.5 --locked
 
       # A engine entra como biblioteca do core: o release publica um binário só.
       - name: Build with cross
