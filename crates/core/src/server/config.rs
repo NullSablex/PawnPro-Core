@@ -11,7 +11,7 @@ use crate::config::types::{ServerConfig, ServerType};
 use crate::server::types::SampCfgData;
 
 /// Nomes de executável de servidor, por plataforma.
-fn server_names() -> &'static [&'static str] {
+const fn server_names() -> &'static [&'static str] {
     if cfg!(windows) {
         &["omp-server.exe", "samp-server.exe", "samp03svr.exe"]
     } else {

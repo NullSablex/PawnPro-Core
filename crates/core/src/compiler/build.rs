@@ -67,10 +67,9 @@ pub fn sanitize_user_args(base: &[String], supported: &Supported) -> SanitizedAr
     let mut removed = Vec::new();
 
     for arg in base {
-        let arg = match arg.strip_prefix('/') {
-            Some(rest) => format!("-{rest}"),
-            None => arg.clone(),
-        };
+        let arg = arg
+            .strip_prefix('/')
+            .map_or_else(|| arg.clone(), |rest| format!("-{rest}"));
         if arg.starts_with("-i") || arg.starts_with("-o") {
             continue;
         }
@@ -97,15 +96,6 @@ pub fn sanitize_user_args(base: &[String], supported: &Supported) -> SanitizedAr
     }
 
     SanitizedArgs { kept, removed }
-}
-
-/// `true` se os argumentos já pedem informação de depuração (`-d1`/`-d2`/`-d3`).
-#[must_use]
-pub fn has_debug_flag(args: &[String]) -> bool {
-    args.iter().any(|a| {
-        let t = a.trim();
-        t.len() >= 3 && t.starts_with("-d") && matches!(t.as_bytes()[2], b'1' | b'2' | b'3')
-    })
 }
 
 /// Depurar exige `-d3` (símbolos e linhas): `-d1` e `-d2` não bastam para o
@@ -139,7 +129,10 @@ pub fn build_compile_args(
     }
     let SanitizedArgs { kept, removed } = sanitize_user_args(&raw, supported);
 
-    let file_dir = file_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let file_dir = file_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
     let amx = file_dir.join(format!(
         "{}.amx",
         file_path.file_stem().unwrap_or_default().to_string_lossy()
@@ -271,14 +264,6 @@ mod tests {
     fn non_flag_arguments_pass_through() {
         let out = sanitize_user_args(&args(&["arquivo.pwn"]), &supported());
         assert_eq!(out.kept, ["arquivo.pwn"]);
-    }
-
-    #[test]
-    fn detects_an_existing_debug_flag() {
-        assert!(has_debug_flag(&args(&["-d1"])));
-        assert!(has_debug_flag(&args(&["-O1", " -d3 "])));
-        assert!(!has_debug_flag(&args(&["-d0"])));
-        assert!(!has_debug_flag(&args(&["-O1"])));
     }
 
     #[test]

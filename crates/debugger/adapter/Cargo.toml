@@ -1,0 +1,13 @@
+[package]
+name = "pawnpro-dap-adapter"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+
+[dependencies]
+pawnpro-dbg-protocol = { path = "../protocol" }
+rust-samp-sdk = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+similar = { workspace = true }

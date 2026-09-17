@@ -14,7 +14,7 @@ use crate::diagnostics::{self, Level};
 use super::protocol::ResponseError;
 
 /// Os métodos deste módulo.
-pub const METHODS: [&str; 4] = ["log.configure", "log.write", "log.path", "log.clear"];
+pub const METHODS: [&str; 3] = ["log.configure", "log.write", "log.clear"];
 
 /// Executa um método de diagnóstico.
 ///
@@ -26,10 +26,10 @@ pub fn dispatch(method: &str, params: &Value) -> Result<Value, ResponseError> {
         // configuração dele — é como a extensão aplica a escolha do usuário.
         "log.configure" => {
             let root = root_of(params)?;
-            let level = match params.get("level").and_then(Value::as_str) {
-                Some(name) => Level::from_name(name),
-                None => level_from_config(&root),
-            };
+            let level = params
+                .get("level")
+                .and_then(Value::as_str)
+                .map_or_else(|| level_from_config(&root), Level::from_name);
             diagnostics::configure(&root, level);
             if level != Level::Off {
                 // Os logs são do diagnóstico de quem roda, não do repositório.
@@ -54,13 +54,6 @@ pub fn dispatch(method: &str, params: &Value) -> Result<Value, ResponseError> {
                 .ok_or_else(|| ResponseError::invalid_params("falta `message`"))?;
             diagnostics::write(level, source, message);
             Ok(json!(true))
-        }
-        "log.path" => {
-            let root = root_of(params)?;
-            Ok(json!({
-                "path": diagnostics::log_path(&root),
-                "level": diagnostics::level().label().to_ascii_lowercase(),
-            }))
         }
         "log.clear" => {
             let root = root_of(params)?;

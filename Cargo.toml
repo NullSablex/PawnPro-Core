@@ -5,6 +5,7 @@ members = [
     "crates/engine",
     "crates/debugger/protocol",
     "crates/debugger/plugin",
+    "crates/debugger/adapter",
 ]
 
 [workspace.package]
@@ -21,6 +22,9 @@ encoding_rs = "0.8"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 interprocess = "2"
 tokio = "1.53"
+tokio-util = "0.7"
+similar = { version = "3.2", default-features = false, features = ["std"] }
+rust-samp-sdk = { version = "3.4.0", default-features = false, features = ["debug"] }
 
 [profile.release]
 lto = true

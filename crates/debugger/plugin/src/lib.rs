@@ -1,6 +1,7 @@
 //! Plugin do servidor (Componente 2 do debugger) — `cdylib` carregado pelo
 //! SA-MP/open.mp. Instala o debug hook do AMX, decide pausas em breakpoint/step
-//! ([`control`]) e atende o adaptador via TCP ([`bridge`]).
+//! ([`control`]) e atende a sessão de depuração pelo soquete do núcleo
+//! ([`bridge`]).
 //!
 //! O ciclo de vida do plugin (Load/Unload/AmxLoad) vem pronto do crate `samp`
 //! (`initialize_plugin!` + `SampPlugin`). A depuração da VM também é nativa do
@@ -14,21 +15,27 @@ mod control;
 mod gate;
 mod hook;
 mod inspect;
+mod program;
 mod runtime_error;
 
-use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use pawnpro_dbg_protocol::transport::env;
 use samp::plugin::SampPlugin;
 use samp::{initialize_plugin, prelude::Amx};
 
-/// `false` até a primeira VM (gamemode) ser carregada. Só ela espera o adaptador
-/// configurar os breakpoints — as demais VMs não bloqueiam a carga.
-static FIRST_AMX_SEEN: AtomicBool = AtomicBool::new(false);
+/// O programa em depuração, lido do `.amx` que a sessão passou. Vazio sem
+/// sessão: nenhuma VM recebe o hook.
+static PROGRAM: OnceLock<program::Fingerprint> = OnceLock::new();
 
-/// Marcador embutido no binário: permite identificar com certeza que este
-/// arquivo é o plugin oficial do depurador (e não um homônimo qualquer com o
-/// mesmo nome). A extensão faz um *grep de bytes* no `.so`/`.dll` procurando
+/// `true` depois que a VM do programa carregou pela primeira vez: só essa carga
+/// espera a sessão configurar os breakpoints.
+static PROGRAM_LOADED: AtomicBool = AtomicBool::new(false);
+
+/// Marcador que identifica este binário como o plugin oficial do depurador.
+///
+/// Distingue o plugin de um homônimo qualquer com o mesmo nome. A extensão faz um *grep de bytes* no `.so`/`.dll` procurando
 /// esta string literal (não lê a tabela de exportação — seria preciso um parser
 /// ELF/PE). Por isso o VALOR precisa aparecer cru no binário.
 ///
@@ -51,10 +58,6 @@ fn anchor_marker() -> u8 {
     unsafe { core::ptr::read_volatile(&raw const PAWNPRO_DEBUG_MARKER[0]) }
 }
 
-/// Identificador de sessão padrão do canal plugin↔adaptador (socket local).
-/// `PAWNPRO_DBG_SESSION` sobrescreve; plugin e adaptador derivam o mesmo nome.
-const DEFAULT_SESSION: &str = "default";
-
 #[derive(Default)]
 struct Debugger;
 
@@ -64,27 +67,41 @@ impl SampPlugin for Debugger {
         // impede que a chamada seja otimizada para fora.
         std::hint::black_box(anchor_marker());
 
-        // Sobe o canal (socket local) para o adaptador.
-        let id =
-            std::env::var("PAWNPRO_DBG_SESSION").unwrap_or_else(|_| DEFAULT_SESSION.to_string());
-        bridge::start(id);
-
-        // Idioma das mensagens de erro, do locale do editor (propagado pelo
-        // adaptador). Ausente/desconhecido → inglês.
-        if let Ok(loc) = std::env::var("PAWNPRO_DBG_LOCALE") {
+        // Idioma das mensagens, do locale do editor (propagado pela sessão).
+        // Antes de conectar: a falha de conexão já sai nele. Ausente ou
+        // desconhecido → inglês.
+        if let Ok(loc) = std::env::var(env::LOCALE) {
             hook::set_locale(crate::runtime_error::Locale::from_tag(&loc));
         }
 
-        // Carrega o bloco de debug do `.amx`, se o caminho foi informado, para a
-        // inspeção saber os símbolos em escopo.
-        if let Some(dbg) = load_debug_from_env() {
-            hook::load_debug(dbg);
+        // Conecta na sessão de depuração que subiu este servidor, se houver.
+        bridge::start(bridge::Session::from_env(|name| std::env::var(name).ok()));
+
+        // Lê o `.amx` em depuração: o bloco de debug, para a inspeção saber os
+        // símbolos, e a identidade, para reconhecer a VM dele entre as outras.
+        if let Some(bytes) = std::env::var(env::AMX_DEBUG)
+            .ok()
+            .and_then(|p| std::fs::read(p).ok())
+        {
+            if let Some(fingerprint) = program::Fingerprint::read(&bytes) {
+                let _ = PROGRAM.set(fingerprint);
+            }
+            if let Ok(dbg) = samp::debug::AmxDbg::from_amx(&bytes) {
+                hook::load_debug(dbg);
+            }
         }
     }
 
     fn on_amx_load(&mut self, amx: &Amx) {
-        // Instala o debug hook do SDK nesta VM; a partir daqui ela chama
-        // `on_debug_break` a cada linha (exige `.amx` compilado com `-d2`/`-d3`).
+        // Só a VM do programa em depuração recebe o hook. As outras — o
+        // gamemode quando se depura um filterscript, e vice-versa — nem passam
+        // pelo plugin: com os endereços começando em zero em cada VM, um
+        // breakpoint pararia no código delas.
+        if !is_program(amx) {
+            return;
+        }
+        // A partir daqui a VM chama `on_debug_break` a cada linha (exige `.amx`
+        // compilado com `-d2`/`-d3`).
         samp::plugin::enable_debug_hook(amx);
 
         // Monta o mapa de opcodes desta VM (inverso de `amx_opcodelist` quando a
@@ -92,12 +109,11 @@ impl SampPlugin for Debugger {
         // abort. Feito uma vez por VM, na carga.
         hook::load_opcode_map(amx);
 
-        // Na PRIMEIRA VM (o gamemode), segura a carga até o adaptador enviar
-        // os breakpoints iniciais (`Configured`) — senão um breakpoint em
-        // código de carga como `OnGameModeInit` passaria antes de o adaptador
-        // conectar. Timeout de segurança: se nada conectar, o servidor segue.
-        // Só a primeira VM espera; filterscripts/outras não bloqueiam.
-        if !FIRST_AMX_SEEN.swap(true, Ordering::SeqCst) {
+        // Na primeira carga do programa, segura até a sessão enviar os
+        // breakpoints iniciais (`Configured`) — senão um breakpoint em código
+        // de carga como `OnGameModeInit` passaria antes de a sessão conectar.
+        // O prazo cobre uma sessão que conectou e não configura.
+        if !PROGRAM_LOADED.swap(true, Ordering::SeqCst) {
             bridge::BRIDGE.wait_configured(std::time::Duration::from_secs(10));
         }
     }
@@ -109,13 +125,28 @@ impl SampPlugin for Debugger {
     }
 }
 
-/// Lê e parseia o bloco de debug do `.amx` apontado por `PAWNPRO_DBG_AMXDBG`
-/// (o caminho do `.amx` compilado com `-d2`/`-d3`). Ausente/inválido → sem
-/// inspeção. Usa `from_amx`, que extrai o bloco `AMX_DBG` do arquivo completo.
-fn load_debug_from_env() -> Option<samp::debug::AmxDbg> {
-    let path = PathBuf::from(std::env::var("PAWNPRO_DBG_AMXDBG").ok()?);
-    let bytes = std::fs::read(path).ok()?;
-    samp::debug::AmxDbg::from_amx(&bytes).ok()
+/// `true` se a VM carregada é o programa em depuração.
+fn is_program(amx: &Amx) -> bool {
+    let Some(expected) = PROGRAM.get() else {
+        return false;
+    };
+    let Some(header) = amx.header() else {
+        return false;
+    };
+    let base = header.as_ptr().cast::<u8>();
+    // SAFETY: `base` é o início da imagem carregada, que tem pelo menos o
+    // cabeçalho; a identidade só lê até o início do código, que o próprio
+    // cabeçalho diz onde fica e que está dentro da imagem.
+    let first: [u8; program::HEADER_LEN] =
+        unsafe { std::ptr::read_unaligned(base.cast::<[u8; program::HEADER_LEN]>()) };
+    let Ok(code) = usize::try_from(program::Fingerprint::code_start(&first)) else {
+        return false;
+    };
+    if code < program::HEADER_LEN {
+        return false;
+    }
+    let image = unsafe { std::slice::from_raw_parts(base, code) };
+    program::Fingerprint::read(image).as_ref() == Some(expected)
 }
 
 initialize_plugin!(

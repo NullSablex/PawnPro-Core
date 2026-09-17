@@ -52,24 +52,8 @@ impl StateManager {
     }
 
     #[must_use]
-    // Não pode ser `const`: o deref de `PathBuf` para `Path` não é const.
-    pub fn state_file_path(&self) -> &Path {
-        &self.file_path
-    }
-
-    /// Relê do disco, descartando o que estiver em memória.
-    pub fn load(&mut self) {
-        self.data = read_state(&self.file_path).unwrap_or_default();
-    }
-
-    #[must_use]
     pub const fn get_all(&self) -> &PawnProState {
         &self.data
-    }
-
-    #[must_use]
-    pub const fn server(&self) -> &ServerState {
-        &self.data.server
     }
 
     /// Substitui o estado do servidor e grava.
@@ -172,6 +156,18 @@ fn restrict_permissions(path: &Path) {
 /// No Windows vale a ACL do diretório, não o modo POSIX.
 #[cfg(not(unix))]
 fn restrict_permissions(_path: &Path) {}
+
+/// Atalhos só dos testes: a produção lê por `get_all`.
+#[cfg(test)]
+impl StateManager {
+    fn state_file_path(&self) -> &Path {
+        &self.file_path
+    }
+
+    const fn server(&self) -> &ServerState {
+        &self.data.server
+    }
+}
 
 #[cfg(test)]
 mod tests {

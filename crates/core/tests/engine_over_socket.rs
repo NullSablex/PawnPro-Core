@@ -1,8 +1,8 @@
 //! A engine hospedada pelo core atende LSP no soquete local.
 //!
 //! O que se verifica aqui não é a análise de Pawn — isso é da engine —, mas a
-//! ligação: o endereço que o core informa aceita conexão, do outro lado há um
-//! servidor LSP de verdade, e só o dono alcança o soquete.
+//! ligação: o endereço que o core informa aceita conexão, a apresentação `lsp`
+//! leva a um servidor LSP de verdade, e só o dono alcança o soquete.
 //!
 //! Só roda no Unix: no Windows o transporte é um named pipe, e o teste
 //! equivalente precisaria do cliente de lá.
@@ -35,12 +35,16 @@ impl Write for Discard {
     }
 }
 
-/// Conecta no soquete, insistindo enquanto a thread da engine não subiu.
+/// Conecta no soquete e se apresenta como LSP, insistindo enquanto a thread do
+/// gateway não subiu.
 fn connect(address: &str) -> UnixStream {
     let deadline = Instant::now() + STARTUP;
     loop {
         match UnixStream::connect(address) {
-            Ok(stream) => return stream,
+            Ok(mut stream) => {
+                stream.write_all(b"PAWNPRO/1 lsp\n").expect("apresentar");
+                return stream;
+            }
             Err(e) if Instant::now() < deadline => {
                 let _ = e;
                 std::thread::sleep(Duration::from_millis(50));
@@ -83,7 +87,6 @@ fn the_engine_answers_the_initialize_where_the_core_says_it_listens() {
     let address = engine
         .start(&sender, &project(), "pt-br")
         .expect("subir a engine");
-    assert!(engine.is_running());
 
     let mut stream = connect(&address);
     stream
@@ -105,6 +108,36 @@ fn the_engine_answers_the_initialize_where_the_core_says_it_listens() {
     );
 
     engine.stop();
+}
+
+/// Com a engine parada, a conexão fecha na hora: ficar numa fila deixaria o
+/// cliente esperando uma resposta que não vem.
+#[test]
+fn a_stopped_engine_closes_the_connection() {
+    let engine = EngineService::new();
+    let sender = Sender::new(Box::new(Discard));
+    let address = engine
+        .start(&sender, &project(), "pt-br")
+        .expect("subir a engine");
+    engine.stop();
+
+    // O laço leva até um intervalo de espera para sair; uma conexão que chega
+    // antes disso ainda é atendida e fica muda. Tenta até uma ser fechada.
+    let deadline = Instant::now() + STARTUP;
+    let closed = loop {
+        let mut stream = connect(&address);
+        stream
+            .set_read_timeout(Some(Duration::from_millis(300)))
+            .expect("prazo de leitura");
+        let mut buf = [0u8; 1];
+        if matches!(stream.read(&mut buf), Ok(0)) {
+            break true;
+        }
+        if Instant::now() >= deadline {
+            break false;
+        }
+    };
+    assert!(closed, "com a engine parada, a conexão devia fechar");
 }
 
 #[test]

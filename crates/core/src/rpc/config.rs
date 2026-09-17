@@ -20,13 +20,13 @@ use super::protocol::ResponseError;
 /// Os métodos deste módulo.
 pub const METHODS: [&str; 8] = [
     "config.open",
-    "config.get",
     "config.set",
     "config.delete",
     "config.reload",
     "config.ensureNamingFiles",
     "config.backupNaming",
     "config.migrateNaming",
+    "config.inlineNamingLists",
 ];
 
 /// Em qual arquivo gravar.
@@ -92,7 +92,6 @@ pub fn dispatch(
             config.open(&workspace_root);
             snapshot(config)
         }
-        "config.get" => snapshot(config),
         "config.set" => {
             let SetParams { entries, scope } = parse(params)?;
             let entries: Vec<(String, Value)> =
@@ -109,6 +108,16 @@ pub fn dispatch(
             config.reload();
             snapshot(config)
         }
+        // Para o aviso de migração: se ainda há listas no JSON do projeto, e
+        // quanto a migração gravaria.
+        "config.inlineNamingLists" => config
+            .read(|m| {
+                json!({
+                    "present": naming_lists::has_inline_naming_lists(m),
+                    "bytes": naming_lists::inline_naming_bytes(m),
+                })
+            })
+            .ok_or_else(not_open),
         "config.ensureNamingFiles" => {
             config
                 .read(naming_lists::ensure_naming_files)

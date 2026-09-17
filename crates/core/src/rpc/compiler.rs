@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::compiler::build::build_compile_args;
+use crate::compiler::build::{build_compile_args, run_compile};
 use crate::compiler::detect::detect_pawncc;
 use crate::compiler::flags::{compute_minimal_args, detect_supported_flags};
 use crate::config::service::ConfigService;
@@ -19,7 +19,41 @@ use crate::project::includes::include_paths_for;
 use super::protocol::ResponseError;
 
 /// Os métodos deste módulo.
-pub const METHODS: [&str; 2] = ["compiler.detect", "compiler.buildArgs"];
+pub const METHODS: [&str; 3] = ["compiler.detect", "compiler.buildArgs", "compiler.run"];
+
+#[derive(Debug, Deserialize)]
+struct RunParams {
+    exe: PathBuf,
+    args: Vec<String>,
+    cwd: PathBuf,
+}
+
+/// Prepara `compiler.run` para rodar fora do laço de mensagens.
+///
+/// Compilar um gamemode grande leva segundos; no laço, todo pedido que
+/// chegasse nesse tempo — a sondagem do painel, o reinício da depuração —
+/// esperaria o compilador. A codificação da saída sai da configuração do
+/// projeto, que o core possui.
+///
+/// # Errors
+/// [`ResponseError`] quando os parâmetros não servem ou nenhum projeto foi
+/// aberto.
+pub fn run_job(params: &Value, config: &ConfigService) -> Result<super::Job, ResponseError> {
+    let RunParams { exe, args, cwd } = serde_json::from_value(params.clone())
+        .map_err(|e| ResponseError::invalid_params(&e.to_string()))?;
+    let encoding = config
+        .read(|m| m.get_all().output.encoding.clone())
+        .ok_or_else(|| {
+            ResponseError::invalid_params("nenhum projeto aberto — chame `config.open` antes")
+        })?;
+    Ok(Box::new(move || {
+        run_compile(&exe, &args, &cwd, &encoding)
+            .map(|result| json!(result))
+            .map_err(|e| {
+                ResponseError::internal(&format!("não foi possível executar o compilador: {e}"))
+            })
+    }))
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

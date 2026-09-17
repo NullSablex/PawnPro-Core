@@ -12,4 +12,10 @@ regex = { workspace = true }
 encoding_rs = { workspace = true }
 sysinfo = { workspace = true }
 pawnpro-engine = { path = "../engine" }
-tokio = { workspace = true, features = ["rt-multi-thread", "net", "time"] }
+pawnpro-dap-adapter = { path = "../debugger/adapter" }
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "time", "io-util"] }
+tokio-util = { workspace = true, features = ["io-util"] }
+
+[dev-dependencies]
+pawnpro-dbg-protocol = { path = "../debugger/protocol" }
+tokio = { workspace = true, features = ["macros", "test-util"] }

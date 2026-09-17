@@ -5,11 +5,6 @@
 //! **pausar**. Mantida separada da casca FFI ([`crate::hook`]) para poder ser
 //! testada sem servidor, usando o `amxdbg` para mapear `cip` → linha.
 
-// A API de step (StepMode::{In,Over,Out}, request_step, resume) é exercida pelos
-// testes e será consumida pela ponte com o adaptador (próximo passo); por ora
-// não tem chamador no build de produção.
-#![allow(dead_code)]
-
 /// Modo de execução pedido pelo adaptador (traduzido dos comandos DAP).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StepMode {
@@ -89,15 +84,9 @@ pub struct Controller {
 }
 
 impl Controller {
+    /// Construtor `const`: o estado global do hook é um `static`.
     #[must_use]
-    pub fn new() -> Self {
-        Self::new_const()
-    }
-
-    /// Construtor `const` — necessário para inicializar o estado global do hook
-    /// num `static`. `HashSet::new` é const desde Rust 1.64.
-    #[must_use]
-    pub const fn new_const() -> Self {
+    pub const fn new() -> Self {
         Self {
             breakpoints: Vec::new(),
             data_watches: Vec::new(),
@@ -135,10 +124,9 @@ impl Controller {
         {
             return BreakAction::None;
         }
-        match &bp.log_message {
-            Some(msg) => BreakAction::Log(msg.clone()),
-            None => BreakAction::Pause,
-        }
+        bp.log_message
+            .as_ref()
+            .map_or(BreakAction::Pause, |msg| BreakAction::Log(msg.clone()))
     }
 
     /// Substitui o conjunto de data breakpoints (já resolvidos a endereço + valor
@@ -177,18 +165,18 @@ impl Controller {
 
     /// Há algum data breakpoint armado? (o hook evita o trabalho de checagem se não.)
     #[must_use]
-    pub fn has_data_watches(&self) -> bool {
+    pub const fn has_data_watches(&self) -> bool {
         !self.data_watches.is_empty()
     }
 
     /// Define o modo de step, capturando o frame atual como referência.
-    pub fn request_step(&mut self, mode: StepMode, current_frame: i32) {
+    pub const fn request_step(&mut self, mode: StepMode, current_frame: i32) {
         self.mode = mode;
         self.step_frame = current_frame;
     }
 
     /// Volta ao modo livre (comando `continue`).
-    pub fn resume(&mut self) {
+    pub const fn resume(&mut self) {
         self.mode = StepMode::Run;
     }
 
@@ -196,7 +184,7 @@ impl Controller {
     /// Chamado pelo hook quando um breakpoint — já com a condição satisfeita —
     /// dispara. Mantido separado de `should_stop` porque a avaliação da condição
     /// precisa das variáveis da VM, que só o hook acessa.
-    pub fn hit_breakpoint(&mut self) {
+    pub const fn hit_breakpoint(&mut self) {
         self.mode = StepMode::Run;
         self.started = true;
     }
@@ -205,7 +193,7 @@ impl Controller {
     /// frame. `None` = continuar. O breakpoint é tratado à parte (ver
     /// `breakpoint_at`/`hit_breakpoint`).
     #[must_use]
-    pub fn should_stop(&mut self, _cip: u32, frm: i32) -> Option<StopReason> {
+    pub const fn should_stop(&mut self, _cip: u32, frm: i32) -> Option<StopReason> {
         let stop = match self.mode {
             StepMode::Run => false,
             // Step in: para em qualquer próxima linha.
@@ -374,7 +362,7 @@ fn compare(l: Operand, r: Operand, op: &str) -> bool {
 
 /// Valor numérico de um operando (`Bool` não é numérico).
 #[allow(clippy::cast_precision_loss)] // comparação de breakpoint; precisão de f32 basta
-fn as_f32(op: Operand) -> Option<f32> {
+const fn as_f32(op: Operand) -> Option<f32> {
     match op {
         Operand::Int(i) => Some(i as f32),
         Operand::Float(f) => Some(f),

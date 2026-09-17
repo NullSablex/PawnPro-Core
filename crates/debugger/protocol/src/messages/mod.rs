@@ -1,5 +1,6 @@
-//! Localização das mensagens do debugger voltadas ao usuário (editor), num só
-//! lugar compartilhado pelo plugin e pelo adaptador: um [`MsgKey`] por mensagem,
+//! Localização das mensagens do debugger voltadas ao usuário.
+//!
+//! Um só lugar compartilhado pelo plugin e pelo adaptador: um [`MsgKey`] por mensagem,
 //! um módulo por idioma em [`langs`] com `get(MsgKey) -> &'static str`, e o
 //! roteamento por [`Locale`] aqui. Os textos são **templates** com marcadores
 //! `{}` (posicionais); [`format`] os preenche. Ver a cobertura em `docs/i18n.md`.
@@ -51,17 +52,37 @@ pub enum MsgKey {
     // --- Mensagens do adaptador (respostas ao editor) ---
     RuntimeErrorsLabel,
     /// Plugin do servidor e adaptador em versões diferentes.
-    PluginVersaoDiferente,
+    PluginVersionMismatch,
     InvalidValue,
     InvalidElement,
     ArrayEditElement,
     EmptyExpression,
     CannotEvaluate,
+    /// A escrita não foi confirmada pelo plugin: recebe o nome da variável.
+    VariableNotWritten,
+    // --- Plugin, no console do servidor ---
+    /// Recebe o endereço, a sessão e o erro do sistema.
+    PluginConnectFailed,
+    // --- Conexão entre o adaptador e o plugin ---
+    WaitingForPlugin,
+    PluginConnected,
+    /// Recebe o prazo, em segundos.
+    PluginNotConnected,
+    /// Recebe o erro do sistema.
+    ServerStartFailed,
+    LaunchWithoutServer,
+    /// Breakpoint numa linha que não existe no código compilado.
+    BreakpointNotCompiled,
+    /// O `.amx` carregado não tem bloco de debug: recebe o caminho.
+    AmxWithoutDebugInfo,
+    /// Frame parado numa linha que não existe mais no arquivo: recebe o nome
+    /// da função e a linha compilada.
+    FrameLineChanged,
 }
 
 /// Template da mensagem `key` no idioma dado (com marcadores `{}` crus).
 #[must_use]
-pub fn msg(locale: Locale, key: MsgKey) -> &'static str {
+pub const fn msg(locale: Locale, key: MsgKey) -> &'static str {
     match locale {
         Locale::PtBr => langs::pt_br::get(key),
         Locale::Es => langs::es::get(key),

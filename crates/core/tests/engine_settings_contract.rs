@@ -106,7 +106,11 @@ fn connect(address: &str) -> UnixStream {
     let deadline = Instant::now() + TIMEOUT;
     loop {
         match UnixStream::connect(address) {
-            Ok(stream) => return stream,
+            Ok(mut stream) => {
+                // O soquete é único: quem conecta diz a que canal pertence.
+                stream.write_all(b"PAWNPRO/1 lsp\n").expect("apresentar");
+                return stream;
+            }
             Err(e) if Instant::now() < deadline => {
                 let _ = e;
                 std::thread::sleep(Duration::from_millis(50));
@@ -187,6 +191,8 @@ fn receive_opt(reader: &mut BufReader<UnixStream>) -> Option<serde_json::Value> 
 
 /// Uma sessão LSP aberta contra a engine que o core hospeda.
 struct Session {
+    /// Onde o core disse que a engine atende.
+    address: String,
     stream: UnixStream,
     reader: BufReader<UnixStream>,
     uri: String,
@@ -204,6 +210,7 @@ impl Session {
         stream.set_read_timeout(Some(TIMEOUT)).expect("prazo");
         let reader = BufReader::new(stream.try_clone().expect("clonar"));
         let mut session = Self {
+            address,
             stream,
             reader,
             uri: project.main_uri(),
@@ -379,8 +386,7 @@ fn two_cores_with_different_folders_do_not_interfere() {
 
     // Endereços distintos: um core não pode atender no soquete do outro.
     assert_ne!(
-        first_core.address(),
-        second_core.address(),
+        first.address, second.address,
         "os dois cores reservaram o mesmo endereço"
     );
 

@@ -1,44 +1,28 @@
-//! Transporte local cross-platform do IPC plugin↔adaptador: socket local
-//! (Unix domain socket no Linux/macOS, named pipe no Windows) via `interprocess`.
+//! Como o plugin alcança o núcleo.
 //!
-//! Substitui o TCP-localhost: sem porta, sem firewall, e o SO já isola o socket
-//! ao usuário. Ambos os lados concordam no **nome** derivado de um `id` (string
-//! curta, ex.: a porta/sessão), produzido por [`socket_name`].
+//! O núcleo atende num soquete local só (Unix domain socket num diretório
+//! privado; named pipe no Windows) e sobe o servidor com o endereço e o id da
+//! sessão no ambiente. O plugin conecta nesse endereço e se apresenta com o id
+//! antes de qualquer mensagem do protocolo.
+//!
+//! Os nomes e o formato ficam aqui porque são contrato entre três peças: o
+//! núcleo que lê a apresentação, a sessão que sobe o servidor e o plugin que
+//! conecta.
 
-use std::io;
+/// Variáveis de ambiente que a sessão passa ao servidor e o plugin lê.
+pub mod env {
+    /// Endereço do núcleo, onde o plugin conecta.
+    pub const ENDPOINT: &str = "PAWNPRO_DBG_ENDPOINT";
+    /// Com que id o plugin se apresenta.
+    pub const SESSION: &str = "PAWNPRO_DBG_SESSION";
+    /// O `.amx` em depuração, de onde o plugin lê o bloco de debug.
+    pub const AMX_DEBUG: &str = "PAWNPRO_DBG_AMXDBG";
+    /// Idioma das mensagens de erro de runtime.
+    pub const LOCALE: &str = "PAWNPRO_DBG_LOCALE";
+}
 
-use interprocess::local_socket::{
-    GenericNamespaced, Listener, ListenerOptions, Stream, ToNsName, traits::Stream as _,
-};
-
-/// Nome do socket a partir de um identificador de sessão. Namespaced para o
-/// `interprocess` escolher o caminho certo por plataforma (em geral
-/// `/tmp/...sock`-equivalente abstrato no Unix, `\\.\pipe\...` no Windows).
+/// A linha com que o plugin se apresenta ao núcleo, com o `\n` final.
 #[must_use]
-pub fn socket_name(id: &str) -> String {
-    format!("pawnpro-dbg-{id}")
+pub fn plugin_greeting(session: &str) -> String {
+    format!("PAWNPRO/1 plugin {session}\n")
 }
-
-/// Cria o listener (lado do plugin) para o `id` dado.
-///
-/// # Errors
-/// Erro de I/O se o nome for inválido ou o socket já estiver em uso.
-pub fn listen(id: &str) -> io::Result<Listener> {
-    let name = socket_name(id);
-    let ns = name.as_str().to_ns_name::<GenericNamespaced>()?;
-    ListenerOptions::new().name(ns).create_sync()
-}
-
-/// Conecta no socket (lado do adaptador) do `id` dado.
-///
-/// # Errors
-/// Erro de I/O se o socket não existir ou a conexão falhar.
-pub fn connect(id: &str) -> io::Result<Stream> {
-    let name = socket_name(id);
-    let ns = name.as_str().to_ns_name::<GenericNamespaced>()?;
-    Stream::connect(ns)
-}
-
-// Re-exporta os tipos que os consumidores precisam nomear, para não dependerem
-// diretamente do `interprocess`.
-pub use interprocess::local_socket::{Listener as LocalListener, Stream as LocalStream};

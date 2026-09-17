@@ -40,7 +40,7 @@ pub struct Response {
 
 impl Response {
     #[must_use]
-    pub fn ok(id: RequestId, result: Value) -> Self {
+    pub const fn ok(id: RequestId, result: Value) -> Self {
         Self {
             jsonrpc: "2.0",
             id,
@@ -50,7 +50,7 @@ impl Response {
     }
 
     #[must_use]
-    pub fn err(id: RequestId, error: ResponseError) -> Self {
+    pub const fn err(id: RequestId, error: ResponseError) -> Self {
         Self {
             jsonrpc: "2.0",
             id,

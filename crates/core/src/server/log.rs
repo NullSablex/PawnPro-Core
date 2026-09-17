@@ -1,79 +1,45 @@
 //! Leitura incremental do log do servidor.
 //!
 //! O servidor escreve num arquivo sem notificar ninguém: acompanhar é comparar
-//! o tamanho de tempos em tempos e ler o que cresceu. Exibir é de quem tem a
-//! interface.
+//! o tamanho de tempos em tempos e ler o que cresceu. A leitura não guarda
+//! estado — quem acompanha guarda a posição e a devolve na chamada seguinte —,
+//! e exibir é de quem tem a interface.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-/// Ler `metadata` de um arquivo local é barato, e meio segundo já faz a saída
-/// parecer imediata.
-pub const POLL_INTERVAL_MS: u64 = 500;
+use serde::Serialize;
 
-/// Acompanha o crescimento de um arquivo de log.
-#[derive(Debug)]
-pub struct LogTailer {
-    file: PathBuf,
-    /// Tamanho do arquivo na última leitura.
-    last_size: u64,
-    encoding: String,
+/// O que cresceu no log desde a última leitura.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogChunk {
+    /// Tamanho do arquivo agora: a posição para a próxima leitura.
+    pub size: u64,
+    /// O texto novo, já decodificado. Vazio sem novidade.
+    pub text: String,
 }
 
-impl LogTailer {
-    /// Começa a acompanhar a partir do fim: abrir o painel não deve despejar
-    /// o log inteiro de execuções anteriores.
-    #[must_use]
-    pub fn new(file: &Path, encoding: &str) -> Self {
-        let last_size = std::fs::metadata(file).map_or(0, |m| m.len());
-        Self {
-            file: file.to_path_buf(),
-            last_size,
-            encoding: if encoding.is_empty() {
-                "windows1252".to_string()
-            } else {
-                encoding.to_lowercase()
-            },
-        }
-    }
-
-    /// O arquivo acompanhado.
-    #[must_use]
-    pub fn file(&self) -> &Path {
-        &self.file
-    }
-
-    /// Evita reiniciar o tail à toa, o que descartaria a posição e faria o
-    /// painel repetir conteúdo.
-    #[must_use]
-    pub fn is_tailing(&self, path: &Path) -> bool {
-        self.file == path
-    }
-
-    /// Lê o que o servidor escreveu desde a última chamada.
-    ///
-    /// Um arquivo que encolheu foi truncado pelo servidor ao reiniciar: a
-    /// leitura recomeça do zero em vez de ler de uma posição inexistente.
-    pub fn read_new(&mut self) -> Option<String> {
-        let size = std::fs::metadata(&self.file).ok()?.len();
-
-        if size < self.last_size {
-            // Log truncado: recomeça, mas sem devolver o conteúdo antigo.
-            self.last_size = 0;
-        }
-        if size == self.last_size {
-            return None;
-        }
-
-        let bytes = read_range(&self.file, self.last_size, size)?;
-        self.last_size = size;
-        if bytes.is_empty() {
-            return None;
-        }
-        Some(crate::compiler::build::decode_output(
-            &bytes,
-            &self.encoding,
-        ))
-    }
+/// Lê o que o servidor escreveu desde `from`.
+///
+/// Sem `from`, só mede o arquivo: abrir o painel não deve despejar o log
+/// inteiro de execuções anteriores. Um arquivo que encolheu foi recriado pelo
+/// servidor ao reiniciar, e a leitura recomeça do início dele — o que está lá é
+/// o log novo. Arquivo ausente é tamanho zero: o servidor ainda não o criou.
+#[must_use]
+pub fn read_since(path: &Path, from: Option<u64>, encoding: &str) -> LogChunk {
+    let size = std::fs::metadata(path).map_or(0, |m| m.len());
+    let Some(from) = from else {
+        return LogChunk {
+            size,
+            text: String::new(),
+        };
+    };
+    let start = if size < from { 0 } else { from };
+    let text = read_range(path, start, size)
+        .filter(|bytes| !bytes.is_empty())
+        .map(|bytes| crate::compiler::build::decode_output(&bytes, encoding))
+        .unwrap_or_default();
+    LogChunk { size, text }
 }
 
 /// Lê um intervalo de bytes do arquivo.
@@ -81,6 +47,9 @@ fn read_range(path: &Path, from: u64, to: u64) -> Option<Vec<u8>> {
     use std::io::{Read, Seek, SeekFrom};
 
     let len = usize::try_from(to.checked_sub(from)?).ok()?;
+    if len == 0 {
+        return None;
+    }
     let mut file = std::fs::File::open(path).ok()?;
     file.seek(SeekFrom::Start(from)).ok()?;
     let mut buf = vec![0u8; len];
@@ -95,6 +64,7 @@ fn read_range(path: &Path, from: u64, to: u64) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::path::PathBuf;
 
     struct TempFile(PathBuf);
 
@@ -133,30 +103,36 @@ mod tests {
         // anteriores.
         let tmp = TempFile::new("tail-end");
         tmp.append(b"linha antiga\n");
-        let mut tailer = LogTailer::new(&tmp.0, "windows1252");
-        assert_eq!(tailer.read_new(), None);
+        let first = read_since(&tmp.0, None, "windows1252");
+        assert_eq!(first.text, "");
+        assert_eq!(first.size, 13);
     }
 
     #[test]
     fn reads_only_what_was_appended() {
         let tmp = TempFile::new("append");
         tmp.append(b"antes\n");
-        let mut tailer = LogTailer::new(&tmp.0, "windows1252");
+        let start = read_since(&tmp.0, None, "windows1252").size;
         tmp.append(b"depois\n");
-        assert_eq!(tailer.read_new().as_deref(), Some("depois\n"));
+        let chunk = read_since(&tmp.0, Some(start), "windows1252");
+        assert_eq!(chunk.text, "depois\n");
         // Sem novidade, nada é devolvido de novo.
-        assert_eq!(tailer.read_new(), None);
+        assert_eq!(read_since(&tmp.0, Some(chunk.size), "windows1252").text, "");
     }
 
     #[test]
-    fn a_truncated_log_restarts_without_repeating() {
+    fn a_truncated_log_restarts_from_the_new_file() {
         // O servidor reiniciou e recriou o arquivo: ler da posição antiga
-        // devolveria lixo, e repetir o conteúdo confundiria quem lê.
+        // devolveria lixo, e pular o começo perderia o que o servidor novo já
+        // escreveu.
         let tmp = TempFile::new("truncate");
         tmp.append(b"conteudo longo anterior\n");
-        let mut tailer = LogTailer::new(&tmp.0, "windows1252");
+        let start = read_since(&tmp.0, None, "windows1252").size;
         tmp.truncate(b"novo\n");
-        assert_eq!(tailer.read_new().as_deref(), Some("novo\n"));
+        assert_eq!(
+            read_since(&tmp.0, Some(start), "windows1252").text,
+            "novo\n"
+        );
     }
 
     #[test]
@@ -164,35 +140,26 @@ mod tests {
         // O servidor escreve em windows-1252: lido como UTF-8, o acento viraria
         // lixo no meio da mensagem.
         let tmp = TempFile::new("encoding");
-        let mut tailer = LogTailer::new(&tmp.0, "windows1252");
         tmp.append(&[b'a', 0xE7, 0xE3, b'o', b'\n']);
-        assert_eq!(tailer.read_new().as_deref(), Some("ação\n"));
+        assert_eq!(read_since(&tmp.0, Some(0), "windows1252").text, "ação\n");
     }
 
     #[test]
-    fn a_missing_file_yields_nothing() {
+    fn a_missing_file_yields_nothing_until_it_appears() {
         let tmp = TempFile::new("missing");
-        let mut tailer = LogTailer::new(&tmp.0, "windows1252");
-        assert_eq!(tailer.read_new(), None);
-        // E passa a ler quando o servidor criar o arquivo.
+        let start = read_since(&tmp.0, None, "windows1252");
+        assert_eq!((start.size, start.text.as_str()), (0, ""));
         tmp.append(b"apareceu\n");
-        assert_eq!(tailer.read_new().as_deref(), Some("apareceu\n"));
-    }
-
-    #[test]
-    fn knows_which_file_it_follows() {
-        // Evita reiniciar o tail à toa, o que descartaria a posição.
-        let tmp = TempFile::new("which");
-        let tailer = LogTailer::new(&tmp.0, "");
-        assert!(tailer.is_tailing(&tmp.0));
-        assert!(!tailer.is_tailing(Path::new("/outro.txt")));
+        assert_eq!(
+            read_since(&tmp.0, Some(start.size), "windows1252").text,
+            "apareceu\n"
+        );
     }
 
     #[test]
     fn an_empty_encoding_falls_back_to_the_server_default() {
         let tmp = TempFile::new("default-enc");
-        let mut tailer = LogTailer::new(&tmp.0, "");
         tmp.append(&[0xE7, b'\n']);
-        assert_eq!(tailer.read_new().as_deref(), Some("ç\n"));
+        assert_eq!(read_since(&tmp.0, Some(0), "").text, "ç\n");
     }
 }

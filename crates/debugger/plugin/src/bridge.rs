@@ -1,25 +1,27 @@
-//! Ponte plugin↔adaptador via socket local (Unix socket / named pipe). Roda numa
-//! thread separada da VM: aceita o adaptador, lê [`Command`]s e os aplica ao
-//! estado; o hook usa [`Bridge::send`] para avisar a pausa e [`PauseGate`] para
-//! bloquear.
+//! Ponte plugin↔núcleo pelo soquete local do núcleo (Unix socket / named pipe).
+//! Roda numa thread separada da VM: conecta, se apresenta com o id da sessão,
+//! lê [`Command`]s e os aplica ao estado; o hook usa [`Bridge::send`] para
+//! avisar a pausa e [`PauseGate`] para bloquear.
 //!
-//! Esta camada é I/O puro e fina; toda a decisão está em [`crate::control`],
-//! [`crate::gate`] e [`crate::inspect`] (testáveis). Por isso não tem testes
-//! próprios — exercitar exigiria sockets reais e um servidor.
+//! Esta camada é I/O fina; a decisão está em [`crate::control`],
+//! [`crate::gate`] e [`crate::inspect`] (testáveis). O que se testa aqui é
+//! o que vem do ambiente; a conexão em si é exercitada pelos testes do núcleo.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::sync::{Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use interprocess::local_socket::traits::{ListenerExt, Stream as _};
-use pawnpro_dbg_protocol::transport::{self, LocalListener, LocalStream};
+use interprocess::local_socket::traits::Stream as _;
+use interprocess::local_socket::{GenericFilePath, Stream as LocalStream, ToFsName};
+use pawnpro_dbg_protocol::messages::{self, MsgKey};
+use pawnpro_dbg_protocol::transport::{self, env};
 use pawnpro_dbg_protocol::{self as wire, Command, Event, Step};
 
 use crate::control::StepMode;
 use crate::gate::{PauseGate, Resume};
 
-/// Metade de envio do socket local — para escrever eventos ao adaptador.
+/// Metade de envio do socket local — para escrever eventos à sessão.
 type SendHalf = <LocalStream as interprocess::local_socket::traits::Stream>::SendHalf;
 
 /// Estado global da ponte. O hook (thread da VM) e a thread do socket
@@ -89,56 +91,71 @@ impl Bridge {
 /// Instância única da ponte (o hook `extern "C"` não tem contexto próprio).
 pub static BRIDGE: Bridge = Bridge::new();
 
-/// Sobe a thread que escuta o adaptador no socket local identificado por `id`.
-/// Chamar uma vez no `on_load` do plugin.
-pub fn start(id: String) {
-    thread::spawn(move || {
-        // O socket pode estar momentaneamente "em uso" se o servidor anterior
-        // (de uma sessão reiniciada) ainda estiver saindo. Tenta por alguns
-        // segundos antes de desistir, em vez de falhar de imediato.
-        let listener = match listen_with_retry(&id) {
-            Ok(l) => {
-                eprintln!("[pawnpro-dbg] canal de depuração aberto (sessão {id:?})");
-                l
-            }
-            Err(e) => {
-                eprintln!("[pawnpro-dbg] falha ao abrir o canal de depuração (sessão {id:?}): {e}");
-                return;
-            }
-        };
-        for incoming in listener.incoming() {
-            let Ok(stream) = incoming else { continue };
-            handle_client(stream);
+/// Onde conectar e com que id se apresentar.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Session {
+    pub endpoint: String,
+    pub id: String,
+}
+
+impl Session {
+    /// Lê a sessão do ambiente. `None` quando o servidor não foi subido por
+    /// uma sessão de depuração do PawnPro.
+    pub fn from_env(var: impl Fn(&str) -> Option<String>) -> Option<Self> {
+        let present = |name| var(name).filter(|value| !value.is_empty());
+        Some(Self {
+            endpoint: present(env::ENDPOINT)?,
+            id: present(env::SESSION)?,
+        })
+    }
+}
+
+/// Conecta na sessão numa thread e passa a atendê-la. Chamar uma vez no
+/// `on_load` do plugin.
+///
+/// Sem sessão, ou sem conseguir conectar, libera a carga da VM na hora: não
+/// há quem vá mandar a configuração, e segurar o servidor pelo prazo inteiro
+/// seria atrasá-lo à toa.
+pub fn start(session: Option<Session>) {
+    let Some(session) = session else {
+        BRIDGE.mark_configured();
+        return;
+    };
+    thread::spawn(move || match connect(&session) {
+        Ok(stream) => handle_client(stream),
+        Err(e) => {
+            let error = e.to_string();
+            eprintln!(
+                "{}",
+                messages::format(
+                    crate::hook::locale(),
+                    MsgKey::PluginConnectFailed,
+                    &[&session.endpoint, &session.id, &error],
+                )
+            );
+            BRIDGE.mark_configured();
         }
     });
 }
 
-/// Abre o listener com retry enquanto o erro for `AddrInUse` (socket de uma
-/// execução anterior que ainda está liberando). Até ~5 s.
-fn listen_with_retry(id: &str) -> std::io::Result<LocalListener> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    loop {
-        match transport::listen(id) {
-            Ok(l) => return Ok(l),
-            Err(e)
-                if e.kind() == std::io::ErrorKind::AddrInUse
-                    && std::time::Instant::now() < deadline =>
-            {
-                thread::sleep(std::time::Duration::from_millis(200));
-            }
-            Err(e) => return Err(e),
-        }
-    }
+/// Conecta no núcleo e se apresenta.
+///
+/// Não precisa de nova tentativa: o núcleo já atende antes de subir o servidor.
+fn connect(session: &Session) -> io::Result<LocalStream> {
+    let name = session.endpoint.as_str().to_fs_name::<GenericFilePath>()?;
+    let mut stream = LocalStream::connect(name)?;
+    stream.write_all(transport::plugin_greeting(&session.id).as_bytes())?;
+    Ok(stream)
 }
 
-/// Atende um adaptador conectado: separa o stream em leitura/escrita, guarda a
+/// Atende a sessão conectada: separa o stream em leitura/escrita, guarda a
 /// metade de envio e lê comandos linha a linha até desconectar.
 fn handle_client(stream: LocalStream) {
     let (recv, send) = stream.split();
     if let Ok(mut guard) = BRIDGE.out.lock() {
         *guard = Some(send);
     }
-    // Antes de qualquer outra coisa: quem somos. O adaptador compara com a
+    // Antes de qualquer outra coisa: quem somos. A sessão compara com a
     // própria versão e avisa o usuário se forem incompatíveis, em vez de
     // deixar a depuração falhar sem explicação.
     BRIDGE.send(&Event::Hello {
@@ -154,7 +171,7 @@ fn handle_client(stream: LocalStream) {
             apply(cmd);
         }
     }
-    // Cliente saiu: limpa a metade de envio e libera qualquer VM ainda em espera
+    // A sessão saiu: limpa a metade de envio e libera qualquer VM ainda em espera
     // pela configuração (senão a carga ficaria presa até o timeout).
     if let Ok(mut guard) = BRIDGE.out.lock() {
         *guard = None;
@@ -177,16 +194,16 @@ fn apply(cmd: Command) {
         }
         Command::Configured => BRIDGE.mark_configured(),
         Command::SetVariable {
+            id,
             frame,
             name,
-            index,
+            path,
             value,
         } => {
-            // Aplica na pausa atual, no frame selecionado. `index` edita um elemento
-            // de array; `None`, um escalar. O adaptador responde ao editor de forma
-            // otimista; aqui só efetivamos a escrita na VM (no-op se não houver pausa
-            // ou a variável não for editável).
-            let _ = crate::hook::set_variable(frame, &name, index, value);
+            // Aplica na pausa atual, no frame selecionado, e confirma: o editor só
+            // mostra o valor novo se ele de fato foi gravado.
+            let ok = crate::hook::set_variable(frame, &name, &path, value).is_some();
+            BRIDGE.send(&Event::VariableSet { id, ok });
         }
         Command::SetDataBreakpoints { watches } => crate::hook::set_data_breakpoints(watches),
         Command::SetExceptionFilter { runtime } => crate::hook::set_runtime_errors(runtime),
@@ -194,9 +211,54 @@ fn apply(cmd: Command) {
             id,
             frame,
             name,
-            index,
+            path,
             offset,
             count,
-        } => crate::hook::read_memory(id, frame, &name, index, offset, count),
+        } => crate::hook::read_memory(id, frame, &name, &path, offset, count),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vars(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let pairs: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        move |name| {
+            pairs
+                .iter()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.clone())
+        }
+    }
+
+    #[test]
+    fn session_comes_from_the_environment() {
+        let session = Session::from_env(vars(&[
+            (env::ENDPOINT, "/run/user/1000/pawnpro-core-1-0/core.sock"),
+            (env::SESSION, "7"),
+        ]));
+        assert_eq!(
+            session,
+            Some(Session {
+                endpoint: "/run/user/1000/pawnpro-core-1-0/core.sock".into(),
+                id: "7".into(),
+            })
+        );
+    }
+
+    /// Servidor subido fora do PawnPro com o plugin instalado: não há sessão,
+    /// e o plugin não pode ficar esperando uma.
+    #[test]
+    fn no_session_without_endpoint_and_id() {
+        assert_eq!(Session::from_env(vars(&[])), None);
+        assert_eq!(Session::from_env(vars(&[(env::SESSION, "7")])), None);
+        assert_eq!(
+            Session::from_env(vars(&[(env::ENDPOINT, "/x"), (env::SESSION, "")])),
+            None
+        );
     }
 }

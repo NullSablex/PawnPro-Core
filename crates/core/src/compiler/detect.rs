@@ -8,7 +8,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// No Windows há variantes de extensão e arquitetura; no resto, um nome só.
-fn executable_names() -> &'static [&'static str] {
+const fn executable_names() -> &'static [&'static str] {
     if cfg!(windows) {
         &["pawncc.exe", "pawncc64.exe", "pawncc", "pawncc.bat"]
     } else {

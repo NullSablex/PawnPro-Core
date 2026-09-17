@@ -28,14 +28,6 @@ pub const CONFIG_POLL: Duration = Duration::from_secs(2);
 /// É chamado com a configuração travada: chamar o serviço de volta travaria.
 pub type Listener = Box<dyn Fn(&ConfigManager) + Send + Sync>;
 
-/// As listas de naming como o projeto as escreveu.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RawNaming {
-    pub blocklist: Vec<String>,
-    pub allow_short_in_loops: Vec<String>,
-}
-
 /// A configuração resolvida e o que a extensão precisa para lidar com os
 /// arquivos dela.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -44,8 +36,6 @@ pub struct Snapshot {
     pub config: PawnProConfig,
     pub global_path: PathBuf,
     pub project_path: PathBuf,
-    /// A migração das listas precisa do que foi escrito, não do mesclado.
-    pub raw_project_naming: RawNaming,
     /// Chaves ignoradas por terem o tipo errado.
     pub rejected: Vec<String>,
 }
@@ -58,10 +48,6 @@ impl Snapshot {
             config: manager.get_all().clone(),
             global_path: manager.global_config_path().to_path_buf(),
             project_path: manager.project_config_path().to_path_buf(),
-            raw_project_naming: RawNaming {
-                blocklist: manager.raw_project_naming_list("blocklist"),
-                allow_short_in_loops: manager.raw_project_naming_list("allowShortInLoops"),
-            },
             rejected: manager.rejected_keys().to_vec(),
         }
     }
@@ -388,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn the_snapshot_carries_what_was_written_and_what_was_refused() {
+    fn the_snapshot_carries_what_was_refused() {
         let tmp = TempDir::new("snapshot");
         tmp.write_config(
             "proj",
@@ -397,13 +383,11 @@ mod tests {
         let service = tmp.service();
         service.open(&tmp.root());
         let snapshot = service.snapshot().expect("aberto");
-        assert_eq!(snapshot.raw_project_naming.blocklist, ["x"]);
         assert_eq!(snapshot.rejected, ["locale"]);
 
         // A extensão lê camelCase; o `serde` precisa entregar assim.
         let json = serde_json::to_value(&snapshot).expect("serializar");
         assert!(json.get("globalPath").is_some());
-        assert!(json["rawProjectNaming"].get("allowShortInLoops").is_some());
         assert!(json["config"].get("includePaths").is_some());
     }
 }

@@ -5,11 +5,13 @@
 
 pub mod compiler;
 pub mod config;
+pub mod debugger;
 pub mod diagnostics;
 pub mod engine;
 pub mod handlers;
 pub mod includes;
 pub mod protocol;
+pub mod server;
 pub mod state;
 
 use std::io::{BufRead, Write};
@@ -18,6 +20,8 @@ use std::sync::{Arc, Mutex};
 use serde_json::json;
 
 use crate::config::{ConfigManager, ConfigService, Snapshot};
+use crate::gateway::Gateway;
+use crate::supervisor::debugger::DebuggerService;
 use crate::supervisor::engine::EngineService;
 
 use protocol::{Notification, Outgoing, Request, RequestId, Response, ResponseError};
@@ -58,10 +62,16 @@ impl Sender {
 }
 
 /// O estado do processo que os métodos precisam: a configuração do projeto
-/// aberto e a engine que ela alimenta.
+/// aberto, a engine que ela alimenta, o depurador e o soquete único por onde
+/// os dois atendem.
+///
+/// A ordem dos campos é a do `Drop`: os subsistemas saem antes do gateway, que
+/// é quem encerra o runtime onde as conexões deles vivem.
 pub struct Services {
     pub config: Arc<ConfigService>,
     pub engine: EngineService,
+    pub debugger: DebuggerService,
+    pub gateway: Arc<Gateway>,
 }
 
 impl Services {
@@ -82,8 +92,15 @@ impl Services {
                 notifier.notify("config.changed", snapshot);
             }
         }));
-        let engine = EngineService::with_config(Arc::clone(&config));
-        Self { config, engine }
+        let gateway = Gateway::new();
+        let engine = EngineService::with_config(Arc::clone(&config), Arc::clone(&gateway));
+        let debugger = DebuggerService::new(Arc::clone(&gateway));
+        Self {
+            config,
+            engine,
+            debugger,
+            gateway,
+        }
     }
 }
 
@@ -99,6 +116,24 @@ fn apply_diagnostics(manager: &ConfigManager) {
     configure(manager.project_root(), level);
     if level != Level::Off {
         ignore_logs(manager.project_root());
+    }
+}
+
+/// Um trabalho demorado, que responde quando terminar.
+pub type Job = Box<dyn FnOnce() -> Result<serde_json::Value, ResponseError> + Send>;
+
+/// O trabalho de um método que não pode ocupar o laço, se for um deles.
+///
+/// O laço atende um pedido por vez: um método que leva segundos, rodado ali,
+/// faria todos os outros esperarem.
+fn background_job(
+    method: &str,
+    params: &serde_json::Value,
+    services: &Services,
+) -> Option<Result<Job, ResponseError>> {
+    match method {
+        "compiler.run" => Some(compiler::run_job(params, &services.config)),
+        _ => None,
     }
 }
 
@@ -122,35 +157,79 @@ pub fn serve<R: BufRead>(input: R, sender: &Sender, services: &Services) -> std:
             continue;
         };
 
+        if let Some(job) = background_job(&request.method, &request.params, services) {
+            let (reply_to, method, id) =
+                (sender.clone(), request.method.clone(), request.id.clone());
+            let spawned = std::thread::Builder::new()
+                .name(format!("pawnpro-rpc-{method}"))
+                .spawn(move || {
+                    let result = job.and_then(|job| job());
+                    if let Some(id) = id {
+                        reply_to.send(&Outgoing::Response(respond(&method, id, result)));
+                    } else if let Err(error) = result {
+                        crate::diag_warn!(
+                            "core/rpc",
+                            "notificação `{method}` falhou: {}",
+                            error.message
+                        );
+                    }
+                });
+            if let Err(error) = spawned {
+                crate::diag_error!("core/rpc", "{} sem thread: {error}", request.method);
+                if let Some(id) = request.id.clone() {
+                    let error =
+                        ResponseError::internal(&format!("sem thread para `{}`", request.method));
+                    sender.send(&Outgoing::Response(Response::err(id, error)));
+                }
+            }
+            continue;
+        }
+
         let Some(id) = request.id.clone() else {
-            // Notificação: executa e não responde.
-            let _ = handle(&request.method, &request.params, sender, services);
+            // Notificação: executa e não responde. Sem resposta pelo protocolo,
+            // uma falha só fica registrada no log.
+            if let Err(error) = handle(&request.method, &request.params, sender, services) {
+                crate::diag_warn!(
+                    "core/rpc",
+                    "notificação `{}` falhou: {}",
+                    request.method,
+                    error.message
+                );
+            }
             continue;
         };
 
-        let response = match handle(&request.method, &request.params, sender, services) {
-            Ok(result) => {
-                // A sondagem da porta se repete a cada poucos segundos
-                // enquanto o painel está aberto: registrá-la afogaria o resto.
-                if !is_polling(&request.method) {
-                    crate::diag_info!("core/rpc", "{} atendido", request.method);
-                }
-                Response::ok(id, result)
-            }
-            Err(error) => {
-                crate::diag_error!(
-                    "core/rpc",
-                    "{} recusado ({}): {}",
-                    request.method,
-                    error.code,
-                    error.message
-                );
-                Response::err(id, error)
-            }
-        };
-        sender.send(&Outgoing::Response(response));
+        let result = handle(&request.method, &request.params, sender, services);
+        sender.send(&Outgoing::Response(respond(&request.method, id, result)));
     }
     Ok(())
+}
+
+/// A resposta a um pedido, com o registro de como terminou.
+fn respond(
+    method: &str,
+    id: RequestId,
+    result: Result<serde_json::Value, ResponseError>,
+) -> Response {
+    match result {
+        Ok(value) => {
+            // A sondagem da porta se repete a cada poucos segundos enquanto o
+            // painel está aberto: registrá-la afogaria o resto.
+            if !is_polling(method) {
+                crate::diag_info!("core/rpc", "{method} atendido");
+            }
+            Response::ok(id, value)
+        }
+        Err(error) => {
+            crate::diag_error!(
+                "core/rpc",
+                "{method} recusado ({}): {}",
+                error.code,
+                error.message
+            );
+            Response::err(id, error)
+        }
+    }
 }
 
 /// Executa um método, incluindo os do próprio core.
@@ -173,6 +252,8 @@ fn handle(
         other if other.starts_with("engine.") => {
             engine::dispatch(other, params, sender, &services.engine)
         }
+        "debug.start" => debugger::dispatch(method, sender, &services.debugger),
+        "server.resolve" => server::dispatch(method, params, &services.config),
         other if other.starts_with("includes.") => {
             includes::dispatch(other, params, &services.config)
         }
@@ -192,7 +273,7 @@ fn is_polling(method: &str) -> bool {
         "server.ping"
             | "server.pidsOnPort"
             | "server.projectServersOnPort"
-            | "engine.status"
+            | "server.readLog"
             // Registrar que se registrou dobra o log e não diz nada.
             | "log.write"
     )
@@ -204,17 +285,13 @@ pub fn method_names() -> Vec<&'static str> {
     let mut names = handlers::method_names();
     names.extend(compiler::METHODS);
     names.extend(config::METHODS);
+    names.extend(debugger::METHODS);
+    names.extend(server::METHODS);
     names.extend(engine::METHODS);
     names.extend(diagnostics::METHODS);
     names.extend(includes::METHODS);
     names.extend(state::METHODS);
     names
-}
-
-/// Um `id` numérico, para quem precisa construir uma resposta à mão.
-#[must_use]
-pub const fn request_id(n: i64) -> RequestId {
-    RequestId::Number(n)
 }
 
 #[cfg(test)]
@@ -261,6 +338,55 @@ mod tests {
             .collect()
     }
 
+    /// Compilar leva segundos. Se `compiler.run` rodasse no laço, todo pedido
+    /// que chegasse nesse tempo esperaria o compilador — a sondagem do painel,
+    /// o reinício da depuração.
+    #[cfg(unix)]
+    #[test]
+    fn a_slow_compile_does_not_hold_other_requests() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("pawnpro-slow-compile-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("pasta");
+        let fake = dir.join("pawncc");
+        std::fs::write(&fake, "#!/bin/sh\nsleep 1\necho compilado\n").expect("compilador falso");
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+
+        let (tx, rx) = mpsc::channel();
+        let sender = Sender::new(Box::new(Collector(tx)));
+        let services = services(&sender);
+        services.config.open(&dir);
+        let input = format!(
+            "{}\n{}\n",
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "compiler.run",
+                    "params": { "exe": fake, "args": [], "cwd": dir } }),
+            json!({ "jsonrpc": "2.0", "id": 2, "method": "core.version" }),
+        );
+        serve(Cursor::new(input), &sender, &services).expect("laço");
+
+        // Só as respostas: abrir o projeto também emite `config.changed`.
+        let ids: Vec<serde_json::Value> = std::iter::from_fn(|| {
+            let line = rx.recv_timeout(std::time::Duration::from_secs(10)).ok()?;
+            serde_json::from_str::<serde_json::Value>(&line).ok()
+        })
+        .filter(|m| m.get("id").is_some_and(|id| !id.is_null()))
+        .take(2)
+        .map(|m| {
+            if m["id"] == 1 {
+                assert_eq!(m["result"]["output"], "compilado\n");
+                assert_eq!(m["result"]["exitCode"], 0);
+            }
+            m["id"].clone()
+        })
+        .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            ids,
+            [json!(2), json!(1)],
+            "o core.version esperou o compilador"
+        );
+    }
+
     #[test]
     fn answers_with_the_same_id_it_received() {
         let out = exchange(r#"{"jsonrpc":"2.0","id":7,"method":"core.version"}"#);
@@ -284,7 +410,7 @@ mod tests {
 
     #[test]
     fn missing_parameters_are_reported() {
-        let out = exchange(r#"{"jsonrpc":"2.0","id":1,"method":"server.detectType"}"#);
+        let out = exchange(r#"{"jsonrpc":"2.0","id":1,"method":"server.loadConfig"}"#);
         assert_eq!(out[0]["error"]["code"], -32602);
         assert!(out[0]["error"]["message"].as_str().unwrap().contains("cwd"));
     }
@@ -337,20 +463,14 @@ mod tests {
         let sender = Sender::new(Box::new(Collector(tx)));
         let services = services(&sender);
         for method in method_names() {
-            let err = handle(method, &json!({}), &sender, &services).err();
+            // O mesmo caminho do laço: primeiro os de segundo plano.
+            let err = background_job(method, &json!({}), &services).map_or_else(
+                || handle(method, &json!({}), &sender, &services).err(),
+                Result::err,
+            );
             let code = err.map_or(0, |e| e.code);
             assert_ne!(code, -32601, "{method} está na lista mas não é despachado");
         }
-    }
-
-    #[test]
-    fn the_engine_reports_it_is_down_before_the_first_start() {
-        // Sem reserva ainda não há endereço: dizer que está de pé faria a
-        // extensão tentar conectar em `null`.
-        let out = exchange(r#"{"jsonrpc":"2.0","id":1,"method":"engine.status"}"#);
-        assert_eq!(out[0]["result"]["running"], false);
-        assert_eq!(out[0]["result"]["address"], serde_json::Value::Null);
-        assert_eq!(out[0]["result"]["restarts"], 0);
     }
 
     #[test]
@@ -413,7 +533,7 @@ mod tests {
 
     #[test]
     fn config_methods_refuse_before_a_project_opens() {
-        let out = exchange(r#"{"jsonrpc":"2.0","id":1,"method":"config.get"}"#);
+        let out = exchange(r#"{"jsonrpc":"2.0","id":1,"method":"config.reload"}"#);
         assert_eq!(out[0]["error"]["code"], -32602);
     }
 
@@ -462,8 +582,10 @@ mod tests {
         );
 
         let cases = [
-            ("server.detectType", json!({ "cwd": tmp })),
-            ("server.detectExecutable", json!({ "workspaceRoot": tmp })),
+            (
+                "server.readLog",
+                json!({ "path": tmp.join("nao-existe.log"), "from": 0 }),
+            ),
             ("server.loadConfig", json!({ "cwd": tmp })),
             ("server.pidsOnPort", json!({ "port": 7777 })),
             ("debug.preflight", json!({ "cwd": tmp })),

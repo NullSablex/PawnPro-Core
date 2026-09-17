@@ -101,17 +101,6 @@ pub fn configure(workspace_root: &Path, level: Level) {
     }
 }
 
-/// O nível em vigor.
-#[must_use]
-pub fn level() -> Level {
-    match LEVEL.load(Ordering::Relaxed) {
-        1 => Level::Error,
-        2 => Level::Warn,
-        3 => Level::Info,
-        _ => Level::Off,
-    }
-}
-
 /// `true` se um evento neste nível seria registrado.
 ///
 /// As macros consultam isto antes de formatar a mensagem: desligado, o custo é
@@ -208,15 +197,6 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let d = u32::try_from(doy - (153 * mp + 2) / 5 + 1).unwrap_or(1);
     let m = u32::try_from(if mp < 10 { mp + 3 } else { mp - 9 }).unwrap_or(1);
     (if m <= 2 { y + 1 } else { y }, m, d)
-}
-
-/// O arquivo unificado, para quem quiser abri-lo.
-#[must_use]
-pub fn log_path(workspace_root: &Path) -> PathBuf {
-    workspace_root
-        .join(".pawnpro")
-        .join("logs")
-        .join("pawnpro.log")
 }
 
 /// Apaga os arquivos de log do projeto.

@@ -33,7 +33,8 @@ fn secret_labels() -> &'static Regex {
 /// comuns, e um falso positivo faria o histórico deixar de servir.
 #[must_use]
 pub fn looks_like_secret(term: &str) -> bool {
-    if term.len() < 8 {
+    // Em caracteres, não bytes: um acento contaria dobrado.
+    if term.chars().count() < 8 {
         return false;
     }
     // Números, IP, coordenada: nada disso é credencial.

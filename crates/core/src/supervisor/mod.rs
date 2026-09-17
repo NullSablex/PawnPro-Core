@@ -1,17 +1,20 @@
 //! Supervisão dos subsistemas.
 //!
-//! Um panic na engine ou no depurador não pode derrubar os outros nem o core:
+//! Um panic na engine ou no soquete não pode derrubar os outros nem o core:
 //! cada um roda numa thread própria, com `catch_unwind` na borda, e volta a
-//! subir sozinho.
+//! subir sozinho. O depurador não passa por aqui — cada sessão é isolada na
+//! própria thread (ver [`debugger`]).
 //!
 //! É por isso que o release não usa `panic = "abort"` — sem unwind o
 //! `catch_unwind` não pega nada.
 
+pub mod debugger;
 pub mod engine;
 
 use std::panic::AssertUnwindSafe;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -37,8 +40,8 @@ const HEALTHY_AFTER: Duration = Duration::from_secs(30);
 pub enum Subsystem {
     /// Análise de Pawn e LSP.
     Engine,
-    /// DAP e o servidor do jogo.
-    Debugger,
+    /// O soquete único por onde LSP, DAP e o plugin chegam.
+    Gateway,
 }
 
 impl Subsystem {
@@ -46,7 +49,7 @@ impl Subsystem {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Engine => "engine",
-            Self::Debugger => "debugger",
+            Self::Gateway => "gateway",
         }
     }
 }
@@ -80,10 +83,10 @@ pub struct Status {
 /// Retornar da função de trabalho é queda: nenhum subsistema termina de
 /// propósito enquanto o core vive.
 pub struct Supervised {
-    subsystem: Subsystem,
     /// Ligado enquanto o subsistema deve rodar; desligar pede o encerramento.
     running: Arc<AtomicBool>,
-    restarts: Arc<AtomicU32>,
+    /// A thread do laço, para quem precisa esperá-la sair.
+    thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Supervised {
@@ -103,35 +106,38 @@ impl Supervised {
         let restarts = Arc::new(AtomicU32::new(0));
 
         let thread_running = Arc::clone(&running);
-        let thread_restarts = Arc::clone(&restarts);
-        std::thread::Builder::new()
+        let thread = std::thread::Builder::new()
             .name(format!("pawnpro-{}", subsystem.name()))
             .spawn(move || {
-                supervise(subsystem, &sender, &work, &thread_running, &thread_restarts);
+                supervise(subsystem, &sender, &work, &thread_running, &restarts);
             })?;
 
         Ok(Self {
-            subsystem,
             running,
-            restarts,
+            thread: Mutex::new(Some(thread)),
         })
-    }
-
-    #[must_use]
-    pub fn subsystem(&self) -> Subsystem {
-        self.subsystem
-    }
-
-    /// Quantas vezes caiu e voltou.
-    #[must_use]
-    pub fn restarts(&self) -> u32 {
-        self.restarts.load(Ordering::Relaxed)
     }
 
     /// Pede o encerramento e retorna. Quem quiser confirmar observa o
     /// `Health`.
     pub fn stop(&self) {
         self.running.store(false, Ordering::Relaxed);
+    }
+
+    /// Pede o encerramento e espera a thread sair.
+    ///
+    /// Para quem vai desmontar algo de que o laço depende — o runtime onde ele
+    /// espera, por exemplo — e não pode fazê-lo com o laço ainda no meio.
+    pub fn stop_and_join(&self) {
+        self.stop();
+        let thread = self
+            .thread
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(thread) = thread {
+            let _ = thread.join();
+        }
     }
 
     /// `true` se ainda deve estar rodando.
@@ -183,7 +189,10 @@ fn supervise<F>(
 
         let count = restarts.fetch_add(1, Ordering::Relaxed) + 1;
         if count > MAX_RESTARTS {
-            // Insistir esconderia o problema.
+            // Insistir esconderia o problema. Desligar o sinalizador é o que
+            // diz a quem pergunta que o subsistema não está de pé — sem isso
+            // ninguém pediria para subi-lo de novo.
+            running.store(false, Ordering::Relaxed);
             crate::diag_error!(
                 "core/supervisor",
                 "{} desistiu depois de {count} quedas",
@@ -309,13 +318,39 @@ mod tests {
         // Um subsistema que cai sempre não vai se consertar: insistir só
         // esconderia o problema.
         let (sender, rx) = collector();
-        let sup = Supervised::spawn(Subsystem::Debugger, sender, |_| {
+        let sup = Supervised::spawn(Subsystem::Gateway, sender, |_| {
+            panic!("sempre falha");
+        })
+        .expect("criar thread");
+
+        // O número de quedas vai na notificação: é o que a extensão mostra.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let failed = loop {
+            assert!(Instant::now() < deadline, "não desistiu");
+            if let Ok(line) = rx.recv_timeout(Duration::from_millis(200))
+                && line.contains("failed")
+            {
+                break line;
+            }
+        };
+        let status: serde_json::Value = serde_json::from_str(&failed).expect("json");
+        let restarts = status["params"]["restarts"].as_u64().expect("restarts");
+        assert!(restarts > u64::from(MAX_RESTARTS), "{status}");
+        drop(sup);
+    }
+
+    /// Quem desistiu não está de pé: se `is_running` seguisse verdadeiro, quem
+    /// sobe o subsistema sob demanda acharia que não há o que fazer.
+    #[test]
+    fn a_subsystem_that_gave_up_is_not_running() {
+        let (sender, rx) = collector();
+        let sup = Supervised::spawn(Subsystem::Gateway, sender, |_| {
             panic!("sempre falha");
         })
         .expect("criar thread");
 
         assert!(wait_for(&rx, "failed"), "não desistiu");
-        assert!(sup.restarts() > MAX_RESTARTS);
+        assert!(wait_until(|| !sup.is_running()));
     }
 
     #[test]
@@ -335,6 +370,36 @@ mod tests {
     }
 
     #[test]
+    fn stop_and_join_returns_after_the_loop_ends() {
+        let (sender, _rx) = collector();
+        let started = Arc::new(AtomicBool::new(false));
+        let finished = Arc::new(AtomicBool::new(false));
+        let (begun, flag) = (Arc::clone(&started), Arc::clone(&finished));
+        let sup = Supervised::spawn(Subsystem::Gateway, sender, move |running| {
+            begun.store(true, Ordering::Relaxed);
+            while running.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            // Um trabalho que ainda arruma a casa depois do pedido de parada.
+            std::thread::sleep(Duration::from_millis(100));
+            flag.store(true, Ordering::Relaxed);
+        })
+        .expect("criar thread");
+
+        // Parar antes de o trabalho começar não testaria a espera: o laço nem
+        // chamaria o trabalho.
+        assert!(
+            wait_until(|| started.load(Ordering::Relaxed)),
+            "não começou"
+        );
+        sup.stop_and_join();
+        assert!(
+            finished.load(Ordering::Relaxed),
+            "voltou antes do laço sair"
+        );
+    }
+
+    #[test]
     fn one_subsystem_falling_does_not_affect_the_other() {
         // É a razão de cada um ter a própria thread e o próprio contador.
         let (sender, rx) = collector();
@@ -348,7 +413,7 @@ mod tests {
             }
         })
         .expect("criar thread");
-        let _broken = Supervised::spawn(Subsystem::Debugger, sender, |_| {
+        let _broken = Supervised::spawn(Subsystem::Gateway, sender, |_| {
             panic!("cai sempre");
         })
         .expect("criar thread");

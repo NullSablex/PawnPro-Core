@@ -17,12 +17,7 @@ use super::Sender;
 use super::protocol::ResponseError;
 
 /// Os métodos deste módulo, na ordem em que a extensão costuma usá-los.
-pub const METHODS: [&str; 4] = [
-    "engine.start",
-    "engine.stop",
-    "engine.status",
-    "engine.reload",
-];
+pub const METHODS: [&str; 1] = ["engine.start"];
 
 /// Executa um método da engine.
 ///
@@ -54,26 +49,6 @@ pub fn dispatch(
                 .map_err(|e| ResponseError::internal(&e.to_string()))?;
             Ok(json!({ "address": address }))
         }
-        // O observador pegaria a mudança em até dois segundos; quando é a
-        // própria extensão que edita a configuração, ela não precisa esperar.
-        "engine.reload" => {
-            engine.deliver_settings();
-            Ok(json!(true))
-        }
-        "engine.stop" => {
-            engine.stop();
-            Ok(json!(true))
-        }
-        "engine.status" => Ok(status(engine)),
         _ => Err(ResponseError::method_not_found(method)),
     }
-}
-
-/// Estado observável da engine.
-fn status(engine: &EngineService) -> Value {
-    json!({
-        "running": engine.is_running(),
-        "address": engine.address(),
-        "restarts": engine.restarts(),
-    })
 }

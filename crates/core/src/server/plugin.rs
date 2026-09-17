@@ -56,7 +56,10 @@ pub struct ArchMismatch {
 /// diria isso melhor, mas a struct é o contrato com a extensão, que lê os
 /// campos separados: a troca fica para quando o TypeScript que a consome
 /// migrar.
-#[allow(clippy::struct_excessive_bools)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "os campos separados são o contrato com a extensão; ver o doc acima"
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DebugPreflight {

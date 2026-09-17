@@ -1,10 +1,10 @@
 //! Protocolo próprio entre o plugin (no servidor) e o adaptador DAP — JSON por
-//! linha (NDJSON) sobre um socket local (Unix domain socket no Linux/macOS,
-//! named pipe no Windows; ver [`transport`]). Simples de propósito: o adaptador
-//! é quem fala DAP com o editor; aqui só trafegam comandos e eventos crus.
+//! linha (NDJSON) sobre o soquete local do núcleo (ver [`transport`]). Simples
+//! de propósito: o adaptador é quem fala DAP com o editor; aqui só trafegam
+//! comandos e eventos crus.
 //!
 //! Crate compartilhado para que plugin (`pawnpro-debug-plugin`) e adaptador
-//! (`dap-adapter`) usem exatamente os mesmos tipos.
+//! (`pawnpro-dap-adapter`) usem exatamente os mesmos tipos.
 //!
 //! Direções:
 //! - **Adaptador → plugin**: [`Command`] (breakpoints, continue, step).
@@ -61,13 +61,15 @@ pub enum Command {
     /// Edita uma variável em escopo na pausa atual: grava `value` na célula de
     /// `name`. `frame` é o índice do frame da pilha (0 = topo, onde a VM parou),
     /// para editar a variável no escopo correto. Só vale enquanto a VM está pausada.
+    /// O plugin confirma com um [`Event::VariableSet`] correlacionado por `id`.
     SetVariable {
+        id: u64,
         frame: usize,
         name: String,
-        /// Índice do elemento, quando a variável é um array (`arr[index]`);
-        /// `None` edita um escalar.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        index: Option<usize>,
+        /// Índices do elemento, um por dimensão (`arr[i][j]` = `[i, j]`);
+        /// vazio edita um escalar.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        path: Vec<usize>,
         value: i32,
     },
     /// Substitui o conjunto de data breakpoints (pausar quando uma variável muda).
@@ -79,28 +81,31 @@ pub enum Command {
     /// `false` deixa a VM abortar normalmente, sem pausar antes.
     SetExceptionFilter { runtime: bool },
     /// Lê memória de dados crua: `count` bytes a partir do endereço da variável
-    /// `name` (elemento `index`, se array) no frame `frame`, mais `offset`. O
+    /// `name` (elemento `path`, se array) no frame `frame`, mais `offset`. O
     /// plugin responde com um [`Event::MemoryData`] correlacionado por `id`.
     ReadMemory {
         id: u64,
         frame: usize,
         name: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        index: Option<usize>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        path: Vec<usize>,
         offset: i64,
         count: usize,
     },
 }
 
-/// Um data breakpoint pedido: a variável `name` em escopo no frame `frame`
-/// (0 = topo). O plugin resolve o endereço de dados e passa a observar mudanças.
-/// `index` observa um elemento de array (`name[index]`); `None` observa um escalar.
+/// Um data breakpoint pedido.
+///
+/// A variável `name` em escopo no frame `frame` (0 = topo). O plugin resolve o
+/// endereço de dados e passa a observar mudanças.
+/// `path` observa um elemento de array, um índice por dimensão (`name[i][j]`);
+/// vazio observa um escalar.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DataWatch {
     pub frame: usize,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub path: Vec<usize>,
 }
 
 /// Evento do plugin para o adaptador.
@@ -136,6 +141,10 @@ pub enum Event {
     /// Resposta a um [`Command::ReadMemory`]: os `bytes` lidos, correlacionados
     /// pelo `id` do pedido. Vazio se o endereço não pôde ser resolvido/lido.
     MemoryData { id: u64, bytes: Vec<u8> },
+    /// Resposta a um [`Command::SetVariable`]: `ok` diz se a célula foi
+    /// gravada. Falha quando a pausa acabou, o frame não existe mais, o caminho
+    /// não chega a uma célula ou o endereço é inacessível.
+    VariableSet { id: u64, ok: bool },
 }
 
 /// Um par variável→valor para a inspeção. Arrays trazem os elementos em
@@ -146,15 +155,19 @@ pub struct Var {
     pub value: String,
     /// Elementos de um array (`[0]`, `[1]`, …); vazio para escalares.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<Var>,
+    pub children: Vec<Self>,
 }
 
 /// Um frame da pilha de chamadas na pausa. `name` é o nome da função (resolvido
-/// do bloco de debug pelo endereço), `line` a linha-fonte do frame e `vars` as
-/// variáveis em escopo nele.
+/// do bloco de debug pelo endereço), `file` e `line` o arquivo e a linha-fonte
+/// do frame e `vars` as variáveis em escopo nele.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Frame {
     pub name: String,
+    /// O arquivo como aparece no bloco de debug: absoluto ou relativo à pasta
+    /// onde o compilador rodou. Um frame pode estar num include.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
     pub line: Option<i32>,
     pub vars: Vec<Var>,
 }
@@ -203,15 +216,17 @@ mod tests {
             Command::Continue,
             Command::Step { mode: Step::Over },
             Command::SetVariable {
+                id: 4,
                 frame: 1,
                 name: "x".into(),
-                index: None,
+                path: vec![],
                 value: 7,
             },
             Command::SetVariable {
+                id: 5,
                 frame: 0,
                 name: "arr".into(),
-                index: Some(2),
+                path: vec![2, 1],
                 value: 9,
             },
             Command::SetDataBreakpoints {
@@ -219,12 +234,12 @@ mod tests {
                     DataWatch {
                         frame: 0,
                         name: "health".into(),
-                        index: None,
+                        path: vec![],
                     },
                     DataWatch {
                         frame: 2,
                         name: "placar".into(),
-                        index: Some(3),
+                        path: vec![3],
                     },
                 ],
             },
@@ -243,6 +258,7 @@ mod tests {
                 reason: "breakpoint".into(),
                 frames: vec![Frame {
                     name: "main".into(),
+                    file: Some("../include/x.inc".into()),
                     line: Some(42),
                     vars: vec![Var {
                         name: "g".into(),
@@ -257,11 +273,13 @@ mod tests {
                 frames: vec![
                     Frame {
                         name: "foo".into(),
+                        file: None,
                         line: Some(7),
                         vars: vec![],
                     },
                     Frame {
                         name: "main".into(),
+                        file: None,
                         line: Some(20),
                         vars: vec![],
                     },
@@ -269,6 +287,7 @@ mod tests {
                 description: Some("divisão por zero".into()),
             },
             Event::Output { text: "x=5".into() },
+            Event::VariableSet { id: 5, ok: false },
             Event::Exited,
         ] {
             let line = to_line(&ev).unwrap();

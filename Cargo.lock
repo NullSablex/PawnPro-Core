@@ -46,6 +46,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
+name = "bstr"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
+dependencies = [
+ "memchr",
+ "serde_core",
+]
+
+[[package]]
 name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -591,19 +601,32 @@ name = "pawnpro-core"
 version = "0.1.0"
 dependencies = [
  "encoding_rs",
+ "pawnpro-dap-adapter",
+ "pawnpro-dbg-protocol",
  "pawnpro-engine",
  "regex",
  "serde",
  "serde_json",
  "sysinfo",
  "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pawnpro-dap-adapter"
+version = "0.1.0"
+dependencies = [
+ "pawnpro-dbg-protocol",
+ "rust-samp-sdk",
+ "serde",
+ "serde_json",
+ "similar",
 ]
 
 [[package]]
 name = "pawnpro-dbg-protocol"
 version = "0.1.0"
 dependencies = [
- "interprocess",
  "serde",
  "serde_json",
 ]
@@ -892,6 +915,15 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "similar"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f66ca1f7aca2474dc10c942eb22feffc897735f54cd1db90138c2fddb490987"
+dependencies = [
+ "bstr",
+]
 
 [[package]]
 name = "slab"

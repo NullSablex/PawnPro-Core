@@ -24,16 +24,17 @@ fn main() -> std::io::Result<()> {
         );
     }));
 
-    // A engine só sobe quando a extensão pedir: criar o soquete na partida
-    // gastaria um em cada janela que nem chega a usar o LSP.
+    // O soquete só nasce quando a extensão pedir a engine ou o depurador:
+    // criá-lo na partida gastaria um em cada janela que nem chega a usá-los.
     let services = Services::new(&sender);
 
     // O laço termina quando o stdin fecha, que é como a extensão encerra o
     // core: fechar o canal, em vez de matar o processo.
     let result = serve(BufReader::new(stdin().lock()), &sender, &services);
 
-    // Fechar o canal encerra o core; o `Drop` da engine para a thread e apaga
-    // o soquete, que senão sobreviveria ao processo.
+    // Fechar o canal encerra o core; o `Drop` dos serviços para as threads,
+    // encerra as sessões de depuração com os servidores delas e apaga o
+    // soquete, que senão sobreviveria ao processo.
     drop(services);
     result
 }

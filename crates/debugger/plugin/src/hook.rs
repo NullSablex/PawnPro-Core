@@ -16,7 +16,7 @@ use samp::prelude::Amx;
 
 use crate::bridge::BRIDGE;
 use crate::control::{
-    Bp, BreakAction, Controller, DataWatch, StepMode, StopReason, eval_condition, interpolate_log,
+    Bp, BreakAction, Controller, DataWatch, StopReason, eval_condition, interpolate_log,
 };
 use crate::gate::Resume;
 use crate::inspect::{self, CellReader};
@@ -31,7 +31,7 @@ use samp::debug::stack;
 const BREAK_OP_SIZE: u32 = 4;
 
 /// Controle de execução (breakpoints/step), compartilhado com a thread TCP.
-static STATE: Mutex<Controller> = Mutex::new(Controller::new_const());
+static STATE: Mutex<Controller> = Mutex::new(Controller::new());
 /// Bloco de debug do `.amx` depurado (carregado no `on_load` do plugin).
 static DBG: Mutex<Option<AmxDbg>> = Mutex::new(None);
 
@@ -72,12 +72,17 @@ pub fn set_locale(locale: Locale) {
     }
 }
 
+/// O idioma definido por [`set_locale`].
+pub fn locale() -> Locale {
+    LOCALE.lock().map_or(Locale::En, |guard| *guard)
+}
+
 /// Lê células pelo `Amx::read_cell` do SDK (com checagem de limites, espelhando
 /// `amx_GetAddr`). Mantém [`inspect::collect`] desacoplado do SDK e testável com
 /// um leitor falso.
 impl CellReader for Amx {
     fn read_cell(&self, data_addr: i32) -> Option<i32> {
-        Amx::read_cell(self, data_addr)
+        Self::read_cell(self, data_addr)
     }
 }
 
@@ -158,7 +163,7 @@ fn emit_logpoint(amx: &Amx, cip: u32, frm: i32, template: &str) {
     BRIDGE.send(&Event::Output { text });
 }
 
-fn reason_str(r: crate::control::StopReason) -> &'static str {
+const fn reason_str(r: crate::control::StopReason) -> &'static str {
     use crate::control::StopReason::{Breakpoint, Entry, Step};
     match r {
         Breakpoint => "breakpoint",
@@ -170,13 +175,11 @@ fn reason_str(r: crate::control::StopReason) -> &'static str {
 /// Pausa: coleta as variáveis em escopo, avisa o adaptador e bloqueia até
 /// continuar/step. Roda na thread da VM (o servidor congela — esperado em dev).
 fn on_pause(amx: &Amx, cip: u32, frm: i32, reason: &str, description: Option<&str>) {
-    let (frames, ctx) = match DBG.lock() {
-        Ok(guard) => match guard.as_ref() {
-            Some(dbg) => build_frames(dbg, amx, cip, frm),
-            None => (Vec::new(), Vec::new()),
-        },
-        Err(_) => (Vec::new(), Vec::new()),
-    };
+    let (frames, ctx) = DBG
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|dbg| build_frames(dbg, amx, cip, frm)))
+        .unwrap_or_default();
 
     // Publica o contexto da pausa (cip/frm de cada frame) para a thread do socket
     // editar variáveis no frame selecionado enquanto a VM está bloqueada abaixo.
@@ -203,8 +206,6 @@ fn on_pause(amx: &Amx, cip: u32, frm: i32, reason: &str, description: Option<&st
             Resume::Continue => ctrl.resume(),
             Resume::Step(mode) => ctrl.request_step(mode, frm),
         }
-        // `Run` é o estado pós-continue; o step já foi armado acima.
-        let _ = StepMode::Run;
     }
 }
 
@@ -219,6 +220,7 @@ fn build_frames(dbg: &AmxDbg, amx: &Amx, cip: u32, frm: i32) -> (Vec<Frame>, Vec
         .iter()
         .map(|&(fcip, ffrm)| Frame {
             name: dbg.lookup_function(fcip).unwrap_or("???").to_string(),
+            file: dbg.lookup_file(fcip).map(str::to_string),
             line: dbg.lookup_line(fcip),
             vars: inspect::collect(dbg, amx, fcip, ffrm),
         })
@@ -265,6 +267,10 @@ pub fn load_opcode_map(amx: &Amx) {
 /// depois do `OP_BREAK`) e checa se alguma instrução vai abortar a VM. Simula
 /// `pri`/`alt` a partir dos valores reais no break, já que a instrução que falha
 /// fica no meio da linha. `None` = segura ou indecodificável.
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "o mapa de opcodes é emprestado da trava e usado até o fim da varredura"
+)]
 fn detect_runtime_error(amx: &Amx, at: u32) -> Option<runtime_error::RuntimeError> {
     let guard = OPCODE_MAP.lock().ok()?;
     let map = guard.as_ref()?;
@@ -314,24 +320,21 @@ pub fn set_breakpoints(bps: Vec<Breakpoint>) {
 }
 
 /// Lê `count` bytes da memória de dados a partir da variável `name` (elemento
-/// `index`, se array) no `frame`, mais `offset`, e responde com um
+/// `path`, se array) no `frame`, mais `offset`, e responde com um
 /// `Event::MemoryData` correlacionado por `id`. Vazio se não resolver/ler.
-pub fn read_memory(
-    id: u64,
-    frame: usize,
-    name: &str,
-    index: Option<usize>,
-    offset: i64,
-    count: usize,
-) {
-    let bytes = read_memory_inner(frame, name, index, offset, count).unwrap_or_default();
+pub fn read_memory(id: u64, frame: usize, name: &str, path: &[usize], offset: i64, count: usize) {
+    let bytes = read_memory_inner(frame, name, path, offset, count).unwrap_or_default();
     BRIDGE.send(&Event::MemoryData { id, bytes });
 }
 
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "o símbolo é emprestado do bloco de debug, que vive na trava"
+)]
 fn read_memory_inner(
     frame: usize,
     name: &str,
-    index: Option<usize>,
+    path: &[usize],
     offset: i64,
     count: usize,
 ) -> Option<Vec<u8>> {
@@ -344,13 +347,8 @@ fn read_memory_inner(
         .symbols_in_scope(cip)
         .into_iter()
         .find(|s| s.name == name)?;
-    let mut base = sym.effective_address(frm);
-    if let Some(i) = index {
-        if !sym.is_array() {
-            return None;
-        }
-        base = base.wrapping_add(i32::try_from(i).ok()?.wrapping_mul(4));
-    }
+    // Um sub-array também tem endereço: a memória dele começa ali.
+    let base = inspect::locate(sym, frm, path, &amx)?.addr;
     let start = i32::try_from(i64::from(base) + offset).ok()?;
 
     // O SDK cuida do alinhamento de cells e para no primeiro endereço
@@ -372,7 +370,7 @@ pub fn set_data_breakpoints(reqs: Vec<pawnpro_dbg_protocol::DataWatch>) {
 /// Resolve os pedidos `(frame, name)` em [`DataWatch`]s com endereço absoluto,
 /// classe (global → nunca expira; local → expira com o frame) e valor inicial.
 /// Usa o contexto da pausa atual ([`PAUSE_CTX`]) e o bloco de debug. Um array só
-/// é observável por um elemento (`index`); pedidos que não resolvem são ignorados.
+/// é observável por um elemento (`path`); pedidos que não resolvem são ignorados.
 fn resolve_data_watches(reqs: Vec<pawnpro_dbg_protocol::DataWatch>) -> Vec<DataWatch> {
     let Some((amx_usize, frames)) = PAUSE_CTX.lock().ok().and_then(|g| g.clone()) else {
         return Vec::new();
@@ -391,25 +389,17 @@ fn resolve_data_watches(reqs: Vec<pawnpro_dbg_protocol::DataWatch>) -> Vec<DataW
                 .symbols_in_scope(cip)
                 .into_iter()
                 .find(|s| s.name == req.name)?;
-            let base = sym.effective_address(frm);
-            // Elemento de array (`name[index]`) ou escalar. Arrays só são
-            // observáveis por um elemento; escalares, sem índice.
-            let (addr, name) = if let Some(i) = req.index {
-                if !sym.is_array() {
-                    return None;
-                }
-                let len = usize::try_from(sym.dims.first().map_or(0, |d| d.size)).unwrap_or(0);
-                if i >= len {
-                    return None;
-                }
-                let addr = base.wrapping_add(i32::try_from(i).ok()?.wrapping_mul(4));
-                (addr, format!("{}[{i}]", req.name))
-            } else {
-                if sym.is_array() {
-                    return None;
-                }
-                (base, req.name)
-            };
+            // Só uma célula é observável: escalar, ou elemento da última
+            // dimensão. Um array ou uma linha inteira não mudam de valor.
+            let located = inspect::locate(sym, frm, &req.path, &amx)?;
+            if !located.is_cell {
+                return None;
+            }
+            let addr = located.addr;
+            let name = req
+                .path
+                .iter()
+                .fold(req.name, |name, i| format!("{name}[{i}]"));
             // Global: endereço absoluto, nunca expira. Local: relativo ao frame,
             // expira quando o frame `frm` retorna.
             let frame_frm = (sym.vclass != VClass::Global).then_some(frm);
@@ -426,12 +416,16 @@ fn resolve_data_watches(reqs: Vec<pawnpro_dbg_protocol::DataWatch>) -> Vec<DataW
 
 /// Edita uma variável em escopo no `frame` pedido (0 = topo) da pausa atual,
 /// gravando `value` na célula via `Amx::write_cell` (com checagem de limites).
-/// `index` mira um elemento de array; `None`, um escalar. Devolve `None` se não
-/// houver pausa, o frame ou o índice estiverem fora de faixa, a variável não
-/// estiver em escopo, o tipo não casar com o `index` ou o endereço for
-/// inacessível. Chamado pela thread do socket com a VM pausada.
+/// `path` mira um elemento de array, um índice por dimensão; vazio, um escalar.
+/// Devolve `None` se não houver pausa, o frame ou um índice estiverem fora de
+/// faixa, a variável não estiver em escopo, o caminho não chegar a uma célula
+/// ou o endereço for inacessível. Chamado pela thread do socket com a VM pausada.
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "o símbolo é emprestado do bloco de debug, que vive na trava"
+)]
 #[must_use]
-pub fn set_variable(frame: usize, name: &str, index: Option<usize>, value: i32) -> Option<i32> {
+pub fn set_variable(frame: usize, name: &str, path: &[usize], value: i32) -> Option<i32> {
     let (amx_usize, cip, frm) = {
         let guard = PAUSE_CTX.lock().ok()?;
         let (amx_usize, frames) = guard.as_ref()?;
@@ -447,23 +441,9 @@ pub fn set_variable(frame: usize, name: &str, index: Option<usize>, value: i32) 
         .into_iter()
         .find(|s| s.name == name)?;
 
-    // Endereço-alvo: elemento `index` de um array, ou a célula de um escalar.
-    let addr = if let Some(i) = index {
-        if !sym.is_array() {
-            return None; // índice pedido em algo que não é array
-        }
-        let len = usize::try_from(sym.dims.first().map_or(0, |d| d.size)).unwrap_or(0);
-        if i >= len {
-            return None; // fora do limite do array
-        }
-        sym.effective_address(frm)
-            .wrapping_add(i32::try_from(i).ok()?.wrapping_mul(4))
-    } else {
-        if sym.is_array() {
-            return None; // array precisa de índice (o array inteiro não é editável)
-        }
-        sym.effective_address(frm)
-    };
+    // Só uma célula é editável: o array ou uma linha inteira não.
+    let located = inspect::locate(sym, frm, path, &amx)?;
+    let addr = located.is_cell.then_some(located.addr)?;
 
     amx.write_cell(addr, value).then_some(value)
 }

@@ -58,19 +58,19 @@ pub enum RuntimeError {
 impl RuntimeError {
     /// Chave da mensagem localizável correspondente.
     #[must_use]
-    fn key(self) -> MsgKey {
+    const fn key(self) -> MsgKey {
         match self {
-            RuntimeError::DivideByZero => MsgKey::DivideByZero,
-            RuntimeError::Bounds => MsgKey::Bounds,
-            RuntimeError::StackError => MsgKey::StackError,
-            RuntimeError::HeapLow => MsgKey::HeapLow,
-            RuntimeError::MemAccess => MsgKey::MemAccess,
+            Self::DivideByZero => MsgKey::DivideByZero,
+            Self::Bounds => MsgKey::Bounds,
+            Self::StackError => MsgKey::StackError,
+            Self::HeapLow => MsgKey::HeapLow,
+            Self::MemAccess => MsgKey::MemAccess,
         }
     }
 
     /// Texto curto para o `stopped` (reason "exception") do DAP, no idioma dado.
     #[must_use]
-    pub fn message(self, locale: Locale) -> &'static str {
+    pub const fn message(self, locale: Locale) -> &'static str {
         messages::msg(locale, self.key())
     }
 }
@@ -79,7 +79,7 @@ impl RuntimeError {
 /// lacuna livre entre o heap (`hea`) e a pilha (`stk`), ou está em/acima do topo
 /// da pilha (`stp`) — inclui endereços negativos (viram enormes sem sinal).
 #[must_use]
-fn mem_invalid(addr: i32, hea: i32, stk: i32, stp: i32) -> bool {
+const fn mem_invalid(addr: i32, hea: i32, stk: i32, stp: i32) -> bool {
     (addr >= hea && addr < stk) || addr.cast_unsigned() >= stp.cast_unsigned()
 }
 

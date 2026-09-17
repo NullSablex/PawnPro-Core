@@ -297,7 +297,7 @@ impl ConfigManager {
     }
 
     #[must_use]
-    pub fn get_all(&self) -> &PawnProConfig {
+    pub const fn get_all(&self) -> &PawnProConfig {
         &self.merged
     }
 
@@ -305,15 +305,6 @@ impl ConfigManager {
     #[must_use]
     pub fn rejected_keys(&self) -> &[String] {
         &self.rejected
-    }
-
-    /// O JSON bruto de um escopo, sem defaults nem substituições.
-    #[must_use]
-    pub fn raw(&self, scope: Scope) -> &Map<String, Value> {
-        match scope {
-            Scope::Global => &self.raw_global,
-            Scope::Project => &self.raw_project,
-        }
     }
 
     /// Uma lista de `analysis.naming` como o projeto a escreveu.
@@ -344,22 +335,6 @@ impl ConfigManager {
             Scope::Global => &self.global_path,
             Scope::Project => &self.project_path,
         }
-    }
-
-    /// Grava um valor num caminho pontuado (`server.output.follow`).
-    ///
-    /// Cria os objetos intermediários. Um segmento que não é objeto é
-    /// substituído: o caminho pedido tem precedência.
-    ///
-    /// # Errors
-    /// Caminho vazio ou com segmento vazio, ou falha de escrita.
-    pub fn set_key(
-        &mut self,
-        dot_path: &str,
-        value: Value,
-        scope: Scope,
-    ) -> Result<(), ConfigError> {
-        self.set_keys(&[(dot_path.to_string(), value)], scope)
     }
 
     /// Grava vários valores numa escrita só.
@@ -429,11 +404,27 @@ impl ConfigManager {
         self.reload();
         Ok(())
     }
+}
 
-    /// Os valores padrão, sem nenhum arquivo.
-    #[must_use]
-    pub fn defaults() -> PawnProConfig {
-        PawnProConfig::default()
+/// Atalhos só dos testes: a produção grava por `set_keys` e lê por `get_all`.
+#[cfg(test)]
+impl ConfigManager {
+    /// O JSON bruto de um escopo, sem defaults nem substituições.
+    fn raw(&self, scope: Scope) -> &Map<String, Value> {
+        match scope {
+            Scope::Global => &self.raw_global,
+            Scope::Project => &self.raw_project,
+        }
+    }
+
+    /// Grava um valor só.
+    pub(crate) fn set_key(
+        &mut self,
+        dot_path: &str,
+        value: Value,
+        scope: Scope,
+    ) -> Result<(), ConfigError> {
+        self.set_keys(&[(dot_path.to_string(), value)], scope)
     }
 }
 

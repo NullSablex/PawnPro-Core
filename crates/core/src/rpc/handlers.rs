@@ -77,14 +77,6 @@ const fn default_rcon_timeout() -> u64 {
 pub fn dispatch(method: &str, params: &Value) -> Result<Value, ResponseError> {
     match method {
         // --- servidor: configuração ---
-        "server.detectType" => {
-            let cwd = path_field(params, "cwd")?;
-            Ok(json!(server::config::detect_server_type(&cwd)))
-        }
-        "server.detectExecutable" => {
-            let root = path_field(params, "workspaceRoot")?;
-            Ok(json!(server::config::detect_server_executable(&root)))
-        }
         "server.loadConfig" => {
             let cwd = path_field(params, "cwd")?;
             let server_type: ServerType = params
@@ -92,6 +84,19 @@ pub fn dispatch(method: &str, params: &Value) -> Result<Value, ResponseError> {
                 .map_or(Ok(ServerType::Auto), |v| serde_json::from_value(v.clone()))
                 .map_err(|e| ResponseError::invalid_params(&e.to_string()))?;
             Ok(json!(server::config::load_server_config(&cwd, server_type)))
+        }
+
+        // --- servidor: log e histórico ---
+        "server.readLog" => read_log(params),
+        "server.sensitiveCommands" => sensitive_commands(params),
+
+        // --- projeto ---
+        "project.changelogSection" => {
+            let path = path_field(params, "path")?;
+            let version = str_field(params, "version")?;
+            Ok(json!(crate::project::changelog::extract_section(
+                &path, version
+            )))
         }
 
         // --- servidor: processos ---
@@ -161,13 +166,39 @@ pub fn dispatch(method: &str, params: &Value) -> Result<Value, ResponseError> {
     }
 }
 
+/// `server.readLog`: o que o log cresceu desde `from`.
+fn read_log(params: &Value) -> Result<Value, ResponseError> {
+    let path = path_field(params, "path")?;
+    let from = params.get("from").and_then(Value::as_u64);
+    let encoding = params
+        .get("encoding")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    Ok(json!(server::log::read_since(&path, from, encoding)))
+}
+
+/// `server.sensitiveCommands`: quais comandos não podem ir para o histórico.
+/// Em lote, porque o painel filtra o histórico inteiro de uma vez.
+fn sensitive_commands(params: &Value) -> Result<Value, ResponseError> {
+    let parse = |value: &Value| -> Result<Vec<String>, ResponseError> {
+        serde_json::from_value(value.clone())
+            .map_err(|e| ResponseError::invalid_params(&e.to_string()))
+    };
+    let commands = parse(field(params, "commands")?)?;
+    let extras = params.get("extras").map_or(Ok(Vec::new()), parse)?;
+    Ok(json!(
+        commands
+            .iter()
+            .map(|cmd| server::secrets::is_sensitive_command(cmd, &extras))
+            .collect::<Vec<_>>()
+    ))
+}
+
 /// Os métodos que este core entende, para a extensão descobrir o que a versão
 /// em execução suporta.
 #[must_use]
 pub fn method_names() -> Vec<&'static str> {
     vec![
-        "server.detectType",
-        "server.detectExecutable",
         "server.loadConfig",
         "server.pidsOnPort",
         "server.projectServersOnPort",
@@ -175,5 +206,8 @@ pub fn method_names() -> Vec<&'static str> {
         "server.ping",
         "rcon.send",
         "debug.preflight",
+        "server.readLog",
+        "server.sensitiveCommands",
+        "project.changelogSection",
     ]
 }
