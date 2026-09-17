@@ -21,8 +21,27 @@ on:
 permissions: read-all
 
 jobs:
+  # Scorecard only analyzes public repositories: on a private one the GraphQL
+  # queries are refused ("Resource not accessible by integration") and the run
+  # fails. The event payload can't be trusted for this — the weekly `schedule`
+  # carries no repository object — so the visibility is asked at run time.
+  visibility:
+    name: Repository visibility
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      public: ${{ steps.check.outputs.public }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "public=$(gh api "repos/$GITHUB_REPOSITORY" -q '.private | not')" >> "$GITHUB_OUTPUT"
+
   analysis:
     name: Scorecard analysis
+    needs: visibility
+    if: needs.visibility.outputs.public == 'true'
     runs-on: ubuntu-latest
     permissions:
       security-events: write   # upload the SARIF results
