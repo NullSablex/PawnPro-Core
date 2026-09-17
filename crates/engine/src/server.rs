@@ -24,7 +24,7 @@ use tower_lsp::{Client, LanguageServer};
 
 use crate::analyzer::diagnostic::Severity;
 use crate::intellisense;
-use crate::messages::Locale;
+use crate::messages::{Locale, MsgKey, msg};
 use crate::util::to_u32;
 use crate::workspace::{WorkspaceState, uri_to_path};
 
@@ -685,11 +685,11 @@ fn code_actions_for(
     };
     let mut actions: CodeActionResponse = Vec::new();
     naming_actions(state, uri, params, &text, &mut actions);
-    pragma_actions(uri, params, &text, &mut actions);
-    missing_body_actions(uri, params, &text, &mut actions);
+    pragma_actions(state.locale, uri, params, &text, &mut actions);
+    missing_body_actions(state.locale, uri, params, &text, &mut actions);
     undeclared_actions(state, uri, params, &text, &mut actions);
     indent_actions(state, uri, params, &text, &mut actions);
-    removal_actions(uri, params, &text, &mut actions);
+    removal_actions(state.locale, uri, params, &text, &mut actions);
     actions
 }
 
@@ -719,7 +719,7 @@ fn naming_actions(
                 continue;
             };
             actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-                title: format!("Renomear para \"{suggestion}\""),
+                title: msg(state.locale, MsgKey::FixRenameTo).replace("{}", &suggestion),
                 kind: Some(CodeActionKind::QUICKFIX),
                 diagnostics: Some(vec![diag.clone()]),
                 edit: Some(edit),
@@ -733,6 +733,7 @@ fn naming_actions(
 /// Quick fixes das diretivas `#pragma` malformadas (PP0019): corrigir o nome
 /// da diretiva ou tirar as aspas da mensagem de `deprecated`.
 fn pragma_actions(
+    locale: Locale,
     uri: &str,
     params: &CodeActionParams,
     text: &str,
@@ -755,8 +756,14 @@ fn pragma_actions(
         };
         let Some(fix) = &issue.fix else { continue };
         let (title, new_text) = match fix {
-            PragmaFix::Rename(s) => (format!("Usar `#pragma {s}`"), s.clone()),
-            PragmaFix::Unquote(inner) => ("Remover as aspas".to_string(), inner.clone()),
+            PragmaFix::Rename(s) => (
+                msg(locale, MsgKey::FixUsePragma).replace("{}", s),
+                s.clone(),
+            ),
+            PragmaFix::Unquote(inner) => (
+                msg(locale, MsgKey::FixRemoveQuotes).to_string(),
+                inner.clone(),
+            ),
         };
         let range = Range {
             start: Position {
@@ -794,6 +801,7 @@ fn replacement_edit(uri: &str, range: Range, new_text: String) -> WorkspaceEdit 
 /// Quick fixes do PP0004 (`public`/`stock` sem corpo): dar um corpo vazio, ou
 /// converter em `forward` — que é a forma de declarar sem corpo.
 fn missing_body_actions(
+    locale: Locale,
     uri: &str,
     params: &CodeActionParams,
     text: &str,
@@ -813,7 +821,7 @@ fn missing_body_actions(
 
         // 1. Trocar o `;` por um corpo vazio.
         actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-            title: "Adicionar corpo vazio".to_string(),
+            title: msg(locale, MsgKey::FixAddEmptyBody).to_string(),
             kind: Some(CodeActionKind::QUICKFIX),
             diagnostics: Some(vec![diag.clone()]),
             edit: Some(replacement_edit(
@@ -839,7 +847,7 @@ fn missing_body_actions(
         let indent = cur.len() - t.len();
         if let Some(kw) = ["public ", "stock "].iter().find(|k| t.starts_with(**k)) {
             actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-                title: format!("Converter `{}` em `forward`", kw.trim_end()),
+                title: msg(locale, MsgKey::FixConvertToForward).replace("{}", kw.trim_end()),
                 kind: Some(CodeActionKind::QUICKFIX),
                 diagnostics: Some(vec![diag.clone()]),
                 edit: Some(replacement_edit(
@@ -893,7 +901,7 @@ fn undeclared_actions(
             continue;
         };
         actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-            title: format!("Trocar por \"{suggestion}\""),
+            title: msg(state.locale, MsgKey::FixReplaceWith).replace("{}", &suggestion),
             kind: Some(CodeActionKind::QUICKFIX),
             diagnostics: Some(vec![diag.clone()]),
             edit: Some(replacement_edit(uri, diag.range, suggestion)),
@@ -933,7 +941,7 @@ fn indent_actions(
         };
         changes.insert(parsed, edits);
         actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-            title: "Corrigir a indentação".to_string(),
+            title: msg(state.locale, MsgKey::FixIndentation).to_string(),
             kind: Some(CodeActionKind::QUICKFIX),
             diagnostics: Some(vec![diag.clone()]),
             edit: Some(WorkspaceEdit {
@@ -950,6 +958,7 @@ fn indent_actions(
 /// params. Não oferecido em arquivos `.inc` — onde um símbolo "não usado" pode
 /// ser usado por quem consome a include (falso positivo ao desenvolvê-la).
 fn removal_actions(
+    locale: Locale,
     uri: &str,
     params: &CodeActionParams,
     text: &str,
@@ -975,7 +984,7 @@ fn removal_actions(
         };
         let edit = workspace_edit(uri, range);
         actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-            title: removal_title(code),
+            title: removal_title(locale, code).to_string(),
             kind: Some(CodeActionKind::QUICKFIX),
             diagnostics: Some(vec![diag.clone()]),
             edit: Some(edit),
@@ -1014,15 +1023,16 @@ fn workspace_edit(uri: &str, range: Range) -> WorkspaceEdit {
     }
 }
 
-fn removal_title(code: &str) -> String {
-    match code {
-        "PP0009" => "Remover parâmetro não usado".to_string(),
-        "PP0005" => "Remover variável não usada".to_string(),
-        "PP0011" => "Remover #define não usado".to_string(),
-        "PP0012" => "Remover #include não usado".to_string(),
-        "PP0002" | "PP0003" => "Remover o corpo".to_string(),
-        _ => "Remover declaração não usada".to_string(),
-    }
+fn removal_title(locale: Locale, code: &str) -> &'static str {
+    let key = match code {
+        "PP0009" => MsgKey::FixRemoveParam,
+        "PP0005" => MsgKey::FixRemoveVariable,
+        "PP0011" => MsgKey::FixRemoveDefine,
+        "PP0012" => MsgKey::FixRemoveInclude,
+        "PP0002" | "PP0003" => MsgKey::FixRemoveBody,
+        _ => MsgKey::FixRemoveDeclaration,
+    };
+    msg(locale, key)
 }
 
 fn server_capabilities() -> ServerCapabilities {
@@ -1071,5 +1081,45 @@ fn server_capabilities() -> ServerCapabilities {
             file_operations: None,
         }),
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LOCALES: [Locale; 5] = [Locale::PtBr, Locale::Es, Locale::Ru, Locale::Ro, Locale::En];
+
+    #[test]
+    fn quick_fix_titles_follow_the_locale() {
+        // Os títulos eram texto fixo em português: com o editor em inglês, o
+        // diagnóstico vinha traduzido e a correção dele não.
+        assert_eq!(
+            removal_title(Locale::En, "PP0009"),
+            "Remove unused parameter"
+        );
+        assert_eq!(
+            removal_title(Locale::PtBr, "PP0009"),
+            "Remover parâmetro não usado"
+        );
+        assert_ne!(
+            removal_title(Locale::Ru, "PP0005"),
+            removal_title(Locale::PtBr, "PP0005")
+        );
+    }
+
+    #[test]
+    fn quick_fix_titles_keep_their_placeholder_in_every_locale() {
+        // Sem o `{}`, o título sairia sem o nome que a correção aplica.
+        for key in [
+            MsgKey::FixRenameTo,
+            MsgKey::FixUsePragma,
+            MsgKey::FixConvertToForward,
+            MsgKey::FixReplaceWith,
+        ] {
+            for locale in LOCALES {
+                assert_eq!(msg(locale, key).matches("{}").count(), 1, "{locale:?}");
+            }
+        }
     }
 }

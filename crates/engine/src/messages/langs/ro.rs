@@ -6,6 +6,10 @@ use crate::messages::MsgKey;
 // Tabel de traducere: câte o linie per `MsgKey` pentru a ușura localizarea și
 // întreținerea, chiar și când două chei împart același text.
 #[allow(clippy::match_same_arms)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "tabela de tradução: uma linha por chave; dividi-la só espalharia o idioma"
+)]
 pub const fn get(key: MsgKey) -> &'static str {
     match key {
         MsgKey::IncludeNotFound => "Include negăsit: \"{}\"",
@@ -102,5 +106,18 @@ pub const fn get(key: MsgKey) -> &'static str {
         MsgKey::NameTooShort => "\"{}\" este foarte scurt — ia în calcul un nume mai descriptiv",
         MsgKey::NamePlaceholder => "\"{}\" este un nume generic — ia în calcul unul mai descriptiv",
         MsgKey::NameStyle => "\"{}\" nu respectă convenția {style}",
+        MsgKey::FixRenameTo => "Redenumește în \"{}\"",
+        MsgKey::FixUsePragma => "Folosește `#pragma {}`",
+        MsgKey::FixRemoveQuotes => "Elimină ghilimelele",
+        MsgKey::FixAddEmptyBody => "Adaugă un corp gol",
+        MsgKey::FixConvertToForward => "Transformă `{}` în `forward`",
+        MsgKey::FixReplaceWith => "Înlocuiește cu \"{}\"",
+        MsgKey::FixIndentation => "Corectează indentarea",
+        MsgKey::FixRemoveParam => "Elimină parametrul nefolosit",
+        MsgKey::FixRemoveVariable => "Elimină variabila nefolosită",
+        MsgKey::FixRemoveDefine => "Elimină #define nefolosit",
+        MsgKey::FixRemoveInclude => "Elimină #include nefolosit",
+        MsgKey::FixRemoveBody => "Elimină corpul",
+        MsgKey::FixRemoveDeclaration => "Elimină declarația nefolosită",
     }
 }

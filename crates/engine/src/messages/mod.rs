@@ -120,6 +120,20 @@ pub enum MsgKey {
     NameTooShort,
     NamePlaceholder,
     NameStyle,
+    // Títulos das correções rápidas.
+    FixRenameTo,
+    FixUsePragma,
+    FixRemoveQuotes,
+    FixAddEmptyBody,
+    FixConvertToForward,
+    FixReplaceWith,
+    FixIndentation,
+    FixRemoveParam,
+    FixRemoveVariable,
+    FixRemoveDefine,
+    FixRemoveInclude,
+    FixRemoveBody,
+    FixRemoveDeclaration,
 }
 
 pub const fn msg(locale: Locale, key: MsgKey) -> &'static str {

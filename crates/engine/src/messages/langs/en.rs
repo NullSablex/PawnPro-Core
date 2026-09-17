@@ -3,6 +3,10 @@ use crate::messages::MsgKey;
 // Tabela de tradução: uma linha por `MsgKey` para facilitar localização e
 // manutenção, mesmo quando duas chaves compartilham o mesmo texto.
 #[allow(clippy::match_same_arms)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "tabela de tradução: uma linha por chave; dividi-la só espalharia o idioma"
+)]
 pub const fn get(key: MsgKey) -> &'static str {
     match key {
         MsgKey::IncludeNotFound => "Include not found: \"{}\"",
@@ -95,5 +99,18 @@ pub const fn get(key: MsgKey) -> &'static str {
         MsgKey::NameTooShort => "\"{}\" is very short — consider a more descriptive name",
         MsgKey::NamePlaceholder => "\"{}\" is a generic name — consider a more descriptive one",
         MsgKey::NameStyle => "\"{}\" does not follow the {style} convention",
+        MsgKey::FixRenameTo => "Rename to \"{}\"",
+        MsgKey::FixUsePragma => "Use `#pragma {}`",
+        MsgKey::FixRemoveQuotes => "Remove the quotes",
+        MsgKey::FixAddEmptyBody => "Add an empty body",
+        MsgKey::FixConvertToForward => "Convert `{}` to `forward`",
+        MsgKey::FixReplaceWith => "Replace with \"{}\"",
+        MsgKey::FixIndentation => "Fix the indentation",
+        MsgKey::FixRemoveParam => "Remove unused parameter",
+        MsgKey::FixRemoveVariable => "Remove unused variable",
+        MsgKey::FixRemoveDefine => "Remove unused #define",
+        MsgKey::FixRemoveInclude => "Remove unused #include",
+        MsgKey::FixRemoveBody => "Remove the body",
+        MsgKey::FixRemoveDeclaration => "Remove unused declaration",
     }
 }
