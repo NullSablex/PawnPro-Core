@@ -27,10 +27,10 @@ impl Preset {
     #[must_use]
     pub fn from_name(name: &str) -> Self {
         match name.to_ascii_lowercase().as_str() {
-            "knr" | "k&r" | "kr" => Preset::Knr,
-            "compact" | "compacto" => Preset::Compact,
-            "custom" => Preset::Custom,
-            _ => Preset::Allman,
+            "knr" | "k&r" | "kr" => Self::Knr,
+            "compact" | "compacto" => Self::Compact,
+            "custom" => Self::Custom,
+            _ => Self::Allman,
         }
     }
 }
@@ -71,7 +71,7 @@ impl FormatStyle {
     /// Opções-base de um preset. `Custom` parte de Allman; os campos individuais
     /// são então sobrescritos pela configuração do usuário.
     #[must_use]
-    pub fn from_preset(preset: Preset) -> Self {
+    pub const fn from_preset(preset: Preset) -> Self {
         let brace = match preset {
             Preset::Knr | Preset::Compact => BracePlacement::SameLine,
             Preset::Allman | Preset::Custom => BracePlacement::NextLine,

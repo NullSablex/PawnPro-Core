@@ -62,6 +62,10 @@ pub fn get_code_lens(state: &WorkspaceState, uri: &str) -> Vec<CodeLens> {
             let title = match refs {
                 0 => msg(locale, MsgKey::RefsZero).to_string(),
                 1 => msg(locale, MsgKey::RefsOne).to_string(),
+                #[allow(
+                    clippy::literal_string_with_formatting_args,
+                    reason = "`{n}` é o marcador das mensagens traduzidas, preenchido aqui"
+                )]
                 n => msg(locale, MsgKey::RefsMany).replace("{n}", &n.to_string()),
             };
 

@@ -28,7 +28,7 @@ pub struct Document {
 }
 
 impl Document {
-    fn new(text: String, version: i32) -> Self {
+    const fn new(text: String, version: i32) -> Self {
         Self {
             text,
             version,
@@ -257,7 +257,6 @@ impl WorkspaceState {
             &parsed.includes,
             &file_path,
             &inc_paths,
-            self.workspace_root.as_deref(),
             locale,
         ));
         diags.extend(semantic::analyze_semantics(&text, locale));
@@ -415,7 +414,7 @@ impl WorkspaceState {
         let Some(idents) = self.idents_of(file, open) else {
             return Vec::new();
         };
-        let dir = file.parent().unwrap_or(Path::new("."));
+        let dir = file.parent().unwrap_or_else(|| Path::new("."));
         idents
             .includes()
             .iter()
@@ -544,11 +543,10 @@ impl Default for WorkspaceState {
 
 /// A URI de um arquivo: a com que o editor o abriu, se aberto; senão, a do
 /// caminho.
-pub(crate) fn uri_for(open: &HashMap<PathBuf, String>, path: &Path) -> Option<String> {
-    match open.get(path) {
-        Some(uri) => Some(uri.clone()),
-        None => Url::from_file_path(path).ok().map(|u| u.to_string()),
-    }
+pub fn uri_for(open: &HashMap<PathBuf, String>, path: &Path) -> Option<String> {
+    open.get(path)
+        .cloned()
+        .or_else(|| Url::from_file_path(path).ok().map(|u| u.to_string()))
 }
 
 /// O caminho canônico, ou o próprio se não existir em disco.

@@ -37,10 +37,8 @@ pub fn analyze_indentation(
         effective_tabsize = Some(n);
     }
 
-    let stream = match effective_tabsize {
-        Some(ts) => tokenize_with_tabsize(text, ts),
-        None => tokenize(text),
-    };
+    let stream =
+        effective_tabsize.map_or_else(|| tokenize(text), |ts| tokenize_with_tabsize(text, ts));
     let tree = parse_stmts(stream);
 
     let mut diags = Vec::new();

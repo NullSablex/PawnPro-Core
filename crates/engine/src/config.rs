@@ -50,8 +50,9 @@ impl Default for NamingConfig {
     }
 }
 
-/// Estilos de caixa aceitos por categoria de identificador. Cada campo é uma
-/// lista de `"camelCase" | "snake_case" | "PascalCase" | "UPPER_CASE"`; lista
+/// Estilos de caixa aceitos por categoria de identificador.
+///
+/// Cada campo é uma lista de `"camelCase" | "snake_case" | "PascalCase" | "UPPER_CASE"`; lista
 /// vazia = sem checagem. Um nome é aceito se casar com QUALQUER estilo da lista.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct StyleConfig {

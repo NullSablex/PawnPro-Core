@@ -33,7 +33,7 @@ use crate::parser::ParsedFile;
 use crate::parser::types::Symbol;
 use crate::workspace::WorkspaceState;
 
-pub(crate) fn extract_word(line: &str, col: usize) -> Option<String> {
+pub fn extract_word(line: &str, col: usize) -> Option<String> {
     let chars: Vec<char> = line.chars().collect();
     let is_ident = |c: char| c.is_alphanumeric() || c == '_';
 
@@ -78,7 +78,7 @@ pub fn suggest_symbol(
 }
 
 /// O arquivo de onde parte a busca por um símbolo.
-pub(crate) struct Origin<'a> {
+pub struct Origin<'a> {
     pub uri: &'a str,
     pub path: &'a Path,
     pub text: &'a str,
@@ -87,7 +87,7 @@ pub(crate) struct Origin<'a> {
 
 /// Um símbolo achado, com a URI e o texto do arquivo que o declara: a coluna
 /// do símbolo é em bytes, e a posição LSP sai da linha.
-pub(crate) struct Located {
+pub struct Located {
     pub uri: String,
     pub text: String,
     pub symbol: Symbol,
@@ -98,7 +98,7 @@ pub(crate) struct Located {
 /// o `.inc` irmão, incluído pelo mesmo `.pwn`. Um programa à parte nunca
 /// entra, mesmo com uma função de mesmo nome. Na unidade, só são lidos os
 /// arquivos que o cache aponta como declarando o nome.
-pub(crate) fn locate_symbol(
+pub fn locate_symbol(
     state: &WorkspaceState,
     origin: &Origin<'_>,
     name: &str,
@@ -148,7 +148,7 @@ pub(crate) fn locate_symbol(
     })
 }
 
-pub(crate) fn collect_all_symbols(
+pub fn collect_all_symbols(
     state: &WorkspaceState,
     file_path: &Path,
     inc_paths: &[PathBuf],

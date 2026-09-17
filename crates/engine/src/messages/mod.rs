@@ -122,7 +122,7 @@ pub enum MsgKey {
     NameStyle,
 }
 
-pub fn msg(locale: Locale, key: MsgKey) -> &'static str {
+pub const fn msg(locale: Locale, key: MsgKey) -> &'static str {
     match locale {
         Locale::PtBr => langs::pt_br::get(key),
         Locale::Es => langs::es::get(key),

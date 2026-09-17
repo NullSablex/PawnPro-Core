@@ -371,7 +371,7 @@ fn collect_locals(text: &str, cursor_line: usize) -> (Vec<String>, Vec<String>) 
         }
     }
 
-    let header_idx = func_header_line.unwrap_or(func_body_start.unwrap_or(0));
+    let header_idx = func_header_line.unwrap_or_else(|| func_body_start.unwrap_or(0));
     let body_start = func_body_start.unwrap_or(0);
 
     let mut params: Vec<String> = Vec::new();
@@ -379,11 +379,7 @@ fn collect_locals(text: &str, cursor_line: usize) -> (Vec<String>, Vec<String>) 
         && let Some(paren_open) = header_ln.find('(')
     {
         let after = &header_ln[paren_open + 1..];
-        let raw_params = if let Some(close) = after.find(')') {
-            &after[..close]
-        } else {
-            after
-        };
+        let raw_params = after.find(')').map_or(after, |close| &after[..close]);
         for part in raw_params.split(',') {
             let name = extract_param_name(part.trim());
             if !name.is_empty() {
@@ -416,11 +412,7 @@ fn extract_param_name(part: &str) -> String {
         .trim()
         .trim_start_matches('&')
         .trim();
-    let part = if let Some(colon) = part.rfind(':') {
-        &part[colon + 1..]
-    } else {
-        part
-    };
+    let part = part.rfind(':').map_or(part, |colon| &part[colon + 1..]);
     let name = part
         .trim_start()
         .split(|c: char| !c.is_alphanumeric() && c != '_')
@@ -435,6 +427,10 @@ fn extract_param_name(part: &str) -> String {
 
 /// Completions do trigger `@`: as tags de documentação Javadoc, úteis apenas
 /// dentro de um comentário. Fora dele, `@` não inicia nada em Pawn.
+#[allow(
+    clippy::literal_string_with_formatting_args,
+    reason = "`${1:nome}` é marcador de snippet do LSP, não argumento de `format!`"
+)]
 pub fn get_at_completions(in_comment: bool, locale: Locale) -> Vec<CompletionItem> {
     if !in_comment {
         return Vec::new();
@@ -592,13 +588,13 @@ enum Rank {
 }
 
 impl Rank {
-    fn prefix(self) -> char {
+    const fn prefix(self) -> char {
         match self {
-            Rank::Local => '0',
-            Rank::File => '1',
-            Rank::Included => '2',
-            Rank::Keyword => '3',
-            Rank::Deprecated => '9',
+            Self::Local => '0',
+            Self::File => '1',
+            Self::Included => '2',
+            Self::Keyword => '3',
+            Self::Deprecated => '9',
         }
     }
 

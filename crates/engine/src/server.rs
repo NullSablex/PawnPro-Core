@@ -125,6 +125,10 @@ async fn publish_diagnostics_for(client: &Client, state: &Arc<RwLock<WorkspaceSt
 
 #[tower_lsp::async_trait]
 impl LanguageServer for PawnProServer {
+    #[allow(
+        clippy::significant_drop_tightening,
+        reason = "as duas escritas precisam do estado; a trava sai logo depois delas"
+    )]
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let root = resolve_workspace_root(&params);
         // A configuração vem do core, não do cliente: `initializationOptions` é
@@ -213,11 +217,13 @@ impl LanguageServer for PawnProServer {
         let mut to_republish: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for uri in &changed_paths {
-            let state = self.state.read().await;
-            if let Some(path) = uri_to_path(uri.as_str()) {
-                state.evict_path_from_cache(&path);
-            }
-            let dependents = state.open_dependents(uri.as_str());
+            let dependents = {
+                let state = self.state.read().await;
+                if let Some(path) = uri_to_path(uri.as_str()) {
+                    state.evict_path_from_cache(&path);
+                }
+                state.open_dependents(uri.as_str())
+            };
             if dependents.is_empty() {
                 to_republish.insert(uri.to_string());
             } else {
@@ -225,11 +231,11 @@ impl LanguageServer for PawnProServer {
             }
         }
 
-        let targets: Vec<Url> = to_republish
+        let targets = to_republish
             .into_iter()
             .filter_map(|u| Url::parse(&u).ok())
-            .collect();
-        join_all(targets.into_iter().map(|u| self.publish_diagnostics_for(u))).await;
+            .map(|u| self.publish_diagnostics_for(u));
+        join_all(targets).await;
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -381,9 +387,12 @@ impl LanguageServer for PawnProServer {
         let state = Arc::clone(&self.state);
 
         let edits = tokio::task::spawn_blocking(move || {
-            let guard = state.blocking_read();
-            let text = guard.get_text(&uri_str)?;
-            let style = style_from(&guard, &lsp);
+            // A trava só enquanto lê: formatar é o trabalho pesado, e segurá-la
+            // nesse tempo atrasaria as edições que chegam.
+            let (text, style) = {
+                let guard = state.blocking_read();
+                (guard.get_text(&uri_str)?, style_from(&guard, &lsp))
+            };
             Some(intellisense::format_document(&text, style))
         })
         .await
@@ -403,9 +412,12 @@ impl LanguageServer for PawnProServer {
         let state = Arc::clone(&self.state);
 
         let edits = tokio::task::spawn_blocking(move || {
-            let guard = state.blocking_read();
-            let text = guard.get_text(&uri_str)?;
-            let style = style_from(&guard, &lsp);
+            // A trava só enquanto lê: formatar é o trabalho pesado, e segurá-la
+            // nesse tempo atrasaria as edições que chegam.
+            let (text, style) = {
+                let guard = state.blocking_read();
+                (guard.get_text(&uri_str)?, style_from(&guard, &lsp))
+            };
             Some(intellisense::format_range(&text, range, style))
         })
         .await
@@ -538,6 +550,10 @@ impl Settings {
     }
 
     /// `true` se algum campo mudou de fato — é o que decide republicar.
+    #[allow(
+        clippy::useless_let_if_seq,
+        reason = "cada campo liga o mesmo `changed`; o primeiro como expressão quebraria a simetria"
+    )]
     fn apply_change(self, state: &mut WorkspaceState) -> bool {
         let mut changed = false;
 
@@ -592,7 +608,7 @@ impl Settings {
 
 /// Combina o estilo configurado no workspace (preset/chaves) com a indentação
 /// que o editor envia por chamada (`tab_size`/`insert_spaces` em `FormattingOptions`).
-fn style_from(
+const fn style_from(
     state: &WorkspaceState,
     lsp: &tower_lsp::lsp_types::FormattingOptions,
 ) -> intellisense::FormatStyle {

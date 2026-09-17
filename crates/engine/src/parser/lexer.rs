@@ -23,10 +23,10 @@ pub fn update_brace_depth(line: &str, mut depth: i32) -> i32 {
 }
 
 pub fn decode_bytes(bytes: &[u8]) -> String {
-    match std::str::from_utf8(bytes) {
-        Ok(s) => s.to_string(),
-        Err(_) => bytes.iter().map(|&b| b as char).collect(),
-    }
+    std::str::from_utf8(bytes).map_or_else(
+        |_| bytes.iter().map(|&b| b as char).collect(),
+        ToString::to_string,
+    )
 }
 
 /// Reconhece `#pragma deprecated [mensagem]`, que marca o **próximo** símbolo
@@ -72,6 +72,13 @@ pub struct StripResult {
     pub in_block: bool,
 }
 
+/// Troca comentários por espaços, mantendo o tamanho em bytes da linha — as
+/// posições do resto continuam valendo. `in_block` diz se a linha começa dentro
+/// de um comentário de bloco; o resultado diz se termina dentro de um.
+///
+/// # Panics
+/// Nunca, a menos que a própria função corte um caractere de vários bytes:
+/// isso é bug dela, e tem de aparecer.
 pub fn strip_line_comments(line: &str, in_block: bool) -> StripResult {
     let bytes = line.as_bytes();
     let len = bytes.len();
@@ -83,13 +90,12 @@ pub fn strip_line_comments(line: &str, in_block: bool) -> StripResult {
 
     while i < len {
         if in_block {
+            out.push(b' ');
             if i + 1 < len && bytes[i] == b'*' && bytes[i + 1] == b'/' {
-                out.push(b' ');
                 out.push(b' ');
                 i += 2;
                 in_block = false;
             } else {
-                out.push(b' ');
                 i += 1;
             }
         } else if in_string {
@@ -135,16 +141,13 @@ pub fn strip_line_comments(line: &str, in_block: bool) -> StripResult {
         out.push(b' ');
     }
 
-    StripResult {
-        // SAFETY: `out` é UTF-8 válido porque:
-        //   1. Dentro de string/char literals, bytes são copiados 1:1 do input (já UTF-8 válido).
-        //   2. Dentro de comentários, cada byte é substituído por b' ' (0x20, ASCII válido).
-        //   3. Fora de literais/comentários, bytes são copiados 1:1.
-        // Nenhum byte multi-byte UTF-8 é dividido: substituições só ocorrem dentro de
-        // comentários onde não há literais de texto — portanto a sequência nunca é cortada.
-        text: unsafe { String::from_utf8_unchecked(out) },
-        in_block,
-    }
+    // Cada byte é copiado ou trocado por um espaço, então o resultado é UTF-8
+    // válido com o mesmo tamanho da entrada. A conversão confere em vez de
+    // presumir: uma mudança que corte um caractere é bug, e deve aparecer —
+    // trocar o trecho por `�` mudaria o tamanho e deslocaria as posições em
+    // silêncio.
+    let text = String::from_utf8(out).expect("cada byte é copiado ou vira espaço");
+    StripResult { text, in_block }
 }
 
 /// Apaga o conteúdo de strings e caracteres, mantendo as aspas e o
@@ -191,6 +194,24 @@ mod tests {
         assert!(!masked.contains("ação") && !masked.contains('x'));
         assert_eq!(masked.find("Foo"), line.find("Foo"));
         assert_eq!(masked.matches('(').count(), 2, "{masked}");
+    }
+
+    /// Acentos em comentário, string e caractere: a saída continua UTF-8 com o
+    /// mesmo tamanho, e o código fora dos comentários não muda de posição.
+    #[test]
+    fn multibyte_text_keeps_length_and_positions() {
+        let line = "x = \"ação\"; /* coração */ y = 'é'; // fim ção";
+        let r = strip_line_comments(line, false);
+        assert_eq!(r.text.len(), line.len());
+        assert!(r.text.contains("\"ação\""));
+        assert!(!r.text.contains("coração") && !r.text.contains("fim"));
+        assert_eq!(r.text.find("y = "), line.find("y = "));
+
+        // Comentário de bloco aberto numa linha e fechado na seguinte.
+        let open = strip_line_comments("a = 1; /* começo ção", false);
+        assert!(open.in_block);
+        let close = strip_line_comments("ão */ b = 2;", true);
+        assert_eq!(close.text.find("b = 2"), "ão */ b = 2;".find("b = 2"));
     }
 
     #[test]

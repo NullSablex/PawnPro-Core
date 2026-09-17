@@ -581,16 +581,13 @@ fn format_keyword_spacing(line: &str) -> String {
         let rep = format!("{kw} (");
         s = replace_whole_word(&s, &pat, &rep);
     }
-    s = replace_whole_word(&s, "else{", "else {");
-    s = replace_whole_word(&s, "else if", "else if");
-    s
+    replace_whole_word(&s, "else{", "else {")
 }
 
 fn replace_whole_word(s: &str, from: &str, to: &str) -> String {
     if !s.contains(from) {
         return s.to_string();
     }
-    let kw = &from[..from.len() - 1]; // keyword part (without the trailing char)
     let mut result = String::with_capacity(s.len());
     let mut rest = s;
     while let Some(pos) = rest.find(from) {
@@ -607,7 +604,6 @@ fn replace_whole_word(s: &str, from: &str, to: &str) -> String {
             result.push_str(from);
         }
         rest = &rest[pos + from.len()..];
-        let _ = kw;
     }
     result.push_str(rest);
     result

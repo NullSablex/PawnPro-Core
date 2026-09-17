@@ -77,6 +77,6 @@ where
     O: AsyncWrite + Unpin,
 {
     let (service, socket) =
-        LspService::new(move |client| server::PawnProServer::new(client, settings.clone()));
+        LspService::new(move |client| server::PawnProServer::new(client, settings));
     Server::new(input, output, socket).serve(service).await;
 }

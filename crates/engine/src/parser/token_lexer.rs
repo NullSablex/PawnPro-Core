@@ -106,7 +106,7 @@ struct Lexer<'s> {
 }
 
 impl<'s> Lexer<'s> {
-    fn new(source: &'s str) -> Self {
+    const fn new(source: &'s str) -> Self {
         Self {
             src: source.as_bytes(),
             pos: 0,
@@ -168,7 +168,7 @@ impl<'s> Lexer<'s> {
 
     /// Calcula a contribuição de um caractere de whitespace para `stmt_indent`,
     /// exatamente como `sc2.c:2340-2347`.
-    fn add_indent_char(&mut self, ch: u8) {
+    const fn add_indent_char(&mut self, ch: u8) {
         if ch == b'\t' && self.tabsize > 0 {
             let ts = self.tabsize;
             self.current_line_indent += ts - (self.current_line_indent + ts) % ts;

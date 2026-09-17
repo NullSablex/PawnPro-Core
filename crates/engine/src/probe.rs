@@ -433,7 +433,6 @@ struct StageTimes {
 fn stage_times(state: &WorkspaceState, file: &Path, text: &str) -> StageTimes {
     let inc_paths = &state.include_paths;
     let locale = state.locale;
-    let ws = state.workspace_root.as_deref();
 
     let (parsed, t_parse) = stage(|| parse_file(text));
     let (resolved, t_collect) =
@@ -445,7 +444,7 @@ fn stage_times(state: &WorkspaceState, file: &Path, text: &str) -> StageTimes {
         ("leitura dos includes", t_collect),
         (
             "includes",
-            stage(|| includes::analyze_includes(&parsed.includes, file, inc_paths, ws, locale)).1,
+            stage(|| includes::analyze_includes(&parsed.includes, file, inc_paths, locale)).1,
         ),
         (
             "semantic",
@@ -651,13 +650,10 @@ fn a_renamed_stock_is_not_found_in_another_program() {
         println!(
             "   [{label}] hover ({hover_time:.1?}): {} — definição ({definition_time:.1?}): {}",
             hover.as_deref().unwrap_or("(nenhum)"),
-            definition
-                .as_ref()
-                .map_or("(nenhuma)".to_string(), |l| format!(
-                    "{}:{}",
-                    sc.relative(&file_of(l)),
-                    l.range.start.line + 1
-                ))
+            definition.as_ref().map_or_else(
+                || "(nenhuma)".to_string(),
+                |l| format!("{}:{}", sc.relative(&file_of(l)), l.range.start.line + 1)
+            )
         );
         if let Some(loc) = &definition {
             assert!(

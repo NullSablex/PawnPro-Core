@@ -72,10 +72,9 @@ fn join_words(words: &[String], target: Case) -> String {
 
 fn capitalize(w: &str) -> String {
     let mut chars = w.chars();
-    match chars.next() {
-        Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
-        None => String::new(),
-    }
+    chars.next().map_or_else(String::new, |first| {
+        first.to_ascii_uppercase().to_string() + chars.as_str()
+    })
 }
 
 #[cfg(test)]

@@ -31,7 +31,7 @@ impl Case {
         }
     }
 
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Camel => "camelCase",
             Self::Snake => "snake_case",
@@ -123,7 +123,7 @@ impl Rule {
     /// O estilo embutido, quando houver — usado para sugerir a renomeação.
     /// `None` para regex: dá para validar um padrão, não para gerar um nome.
     #[must_use]
-    pub fn builtin(&self) -> Option<Case> {
+    pub const fn builtin(&self) -> Option<Case> {
         match self {
             Self::Builtin(c) => Some(*c),
             Self::Custom { .. } => None,

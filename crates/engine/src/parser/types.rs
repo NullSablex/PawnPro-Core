@@ -40,7 +40,7 @@ impl Deprecation {
         message: None,
     };
 
-    pub fn marked(message: Option<String>) -> Self {
+    pub const fn marked(message: Option<String>) -> Self {
         Self {
             is_deprecated: true,
             message,

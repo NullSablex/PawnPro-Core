@@ -32,7 +32,7 @@ pub struct DocParam {
 }
 
 impl DocComment {
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.summary.is_none()
             && self.description.is_none()
             && self.params.is_empty()

@@ -47,11 +47,10 @@ pub fn get_signature_help(
         .params
         .iter()
         .map(|p| {
-            let label = if let Some(tag) = &p.tag {
-                format!("{}:{}", tag, p.name)
-            } else {
-                p.name.clone()
-            };
+            let label = p
+                .tag
+                .as_ref()
+                .map_or_else(|| p.name.clone(), |tag| format!("{tag}:{}", p.name));
             // A doc do parâmetro casa pelo nome, não pela posição: um
             // comentário pode omitir parâmetros ou listá-los fora de ordem.
             let documentation = doc
@@ -75,7 +74,7 @@ pub fn get_signature_help(
 
     Some(SignatureHelp {
         signatures: vec![SignatureInformation {
-            label: sym.signature.clone().unwrap_or_default(),
+            label: sym.signature.unwrap_or_default(),
             documentation: doc.as_ref().and_then(|d| d.to_markdown(&labels)).map(|v| {
                 Documentation::MarkupContent(MarkupContent {
                     kind: MarkupKind::Markdown,

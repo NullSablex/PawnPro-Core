@@ -6,7 +6,7 @@ use crate::messages::MsgKey;
 // Таблица перевода: по одной строке на `MsgKey` для удобства локализации и
 // поддержки, даже когда два ключа используют один и тот же текст.
 #[allow(clippy::match_same_arms)]
-pub fn get(key: MsgKey) -> &'static str {
+pub const fn get(key: MsgKey) -> &'static str {
     match key {
         MsgKey::IncludeNotFound => "Include не найден: \"{}\"",
         MsgKey::IncludeTried => " (также пробовали: {}.inc)",

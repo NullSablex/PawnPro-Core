@@ -73,7 +73,10 @@ fn collect_deprecated_includes(
         }
 
         if pending_deprecated && let Some(cap) = RX_INCLUDE.captures(line) {
-            let token = cap.get(1).or(cap.get(2)).map_or("", |m| m.as_str().trim());
+            let token = cap
+                .get(1)
+                .or_else(|| cap.get(2))
+                .map_or("", |m| m.as_str().trim());
             let is_angle = cap.get(1).is_some();
             let dir = IncludeDirective {
                 token: token.to_string(),
@@ -116,7 +119,7 @@ pub fn analyze_deprecated(
 ) -> Vec<PawnDiagnostic> {
     let mut diags = Vec::new();
     let lines: Vec<&str> = text.split('\n').collect();
-    let file_dir = file_path.parent().unwrap_or(Path::new("."));
+    let file_dir = file_path.parent().unwrap_or_else(|| Path::new("."));
 
     let deprecated_files =
         collect_deprecated_includes(&lines, file_dir, include_paths, locale, &mut diags);
@@ -146,7 +149,7 @@ pub fn analyze_deprecated(
         }
     }
     for m in &parsed.deprecated_macros {
-        dep_macros.entry(m.clone()).or_insert(DepEntry {
+        dep_macros.entry(m.clone()).or_insert_with(|| DepEntry {
             kind: DepKind::Individual,
             decl_line: None,
             message: None,
@@ -155,17 +158,18 @@ pub fn analyze_deprecated(
 
     for sym in &parsed.symbols {
         if sym.kind == SymbolKind::Forward && deprecated_public_names.contains(&sym.name) {
-            dep_callables.entry(sym.name.clone()).or_insert(DepEntry {
-                kind: DepKind::Individual,
-                decl_line: Some(sym.line),
-                message: sym.deprecated_message.clone(),
-            });
+            dep_callables
+                .entry(sym.name.clone())
+                .or_insert_with(|| DepEntry {
+                    kind: DepKind::Individual,
+                    decl_line: Some(sym.line),
+                    message: sym.deprecated_message.clone(),
+                });
         }
     }
 
-    let _ = include_paths;
     for fp in &resolved.paths {
-        let canon = fp.canonicalize().unwrap_or(fp.clone());
+        let canon = fp.canonicalize().unwrap_or_else(|_| fp.clone());
         let all_deprecated = deprecated_files.contains(&canon);
 
         if let Some(entry) = resolved
@@ -200,7 +204,7 @@ pub fn analyze_deprecated(
                 } else {
                     DepKind::Individual
                 };
-                dep_macros.entry(m.clone()).or_insert(DepEntry {
+                dep_macros.entry(m.clone()).or_insert_with(|| DepEntry {
                     kind,
                     decl_line: None,
                     message: None,
@@ -211,11 +215,13 @@ pub fn analyze_deprecated(
 
     for sym in &parsed.symbols {
         if sym.kind == SymbolKind::Public && deprecated_forward_names.contains(&sym.name) {
-            dep_callables.entry(sym.name.clone()).or_insert(DepEntry {
-                kind: DepKind::Individual,
-                decl_line: Some(sym.line),
-                message: sym.deprecated_message.clone(),
-            });
+            dep_callables
+                .entry(sym.name.clone())
+                .or_insert_with(|| DepEntry {
+                    kind: DepKind::Individual,
+                    decl_line: Some(sym.line),
+                    message: sym.deprecated_message.clone(),
+                });
         }
     }
 

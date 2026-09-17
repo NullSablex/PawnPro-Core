@@ -14,7 +14,7 @@ pub fn utf16_col(line: &str, byte_col: usize) -> u32 {
     crate::util::to_u32(line.get(..end).map_or(end, |s| s.encode_utf16().count()))
 }
 
-fn is_ident_byte(b: u8) -> bool {
+const fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 

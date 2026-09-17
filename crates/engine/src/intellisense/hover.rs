@@ -30,12 +30,7 @@ pub fn get_hover(state: &WorkspaceState, uri: &str, position: Position) -> Optio
     }
     let line = lines[line_idx];
 
-    if let Some(h) = hover_include(
-        line,
-        &file_path,
-        &inc_paths,
-        state.workspace_root.as_deref(),
-    ) {
+    if let Some(h) = hover_include(line, &file_path, &inc_paths) {
         return Some(h);
     }
 
@@ -51,12 +46,7 @@ pub fn get_hover(state: &WorkspaceState, uri: &str, position: Position) -> Optio
     Some(format_symbol(&found.symbol, locale))
 }
 
-fn hover_include(
-    line: &str,
-    file_path: &Path,
-    inc_paths: &[std::path::PathBuf],
-    workspace_root: Option<&Path>,
-) -> Option<Hover> {
+fn hover_include(line: &str, file_path: &Path, inc_paths: &[std::path::PathBuf]) -> Option<Hover> {
     if !line.trim().starts_with('#') {
         return None;
     }
@@ -74,10 +64,9 @@ fn hover_include(
         line: 0,
         col: 0,
     };
-    let file_dir = file_path.parent().unwrap_or(Path::new("."));
+    let file_dir = file_path.parent().unwrap_or_else(|| Path::new("."));
     resolve_include(&dir, file_dir, inc_paths)?;
 
-    let _ = workspace_root;
     let md = format!("```\n{}\n```\n\n`{}`", line.trim(), token);
     Some(Hover {
         contents: HoverContents::Markup(MarkupContent {
@@ -110,16 +99,11 @@ fn format_symbol(sym: &Symbol, locale: crate::messages::Locale) -> Hover {
         SymbolKind::Variable => "new",
     };
 
-    let mut md = if let Some(sig) = &sym.signature {
-        if kw.is_empty() {
-            format!("```pawn\n{sig}\n```")
-        } else {
-            format!("```pawn\n{kw} {sig}\n```")
-        }
-    } else if kw.is_empty() {
-        format!("```pawn\n{}\n```", sym.name)
+    let declaration = sym.signature.as_deref().unwrap_or(&sym.name);
+    let mut md = if kw.is_empty() {
+        format!("```pawn\n{declaration}\n```")
     } else {
-        format!("```pawn\n{} {}\n```", kw, sym.name)
+        format!("```pawn\n{kw} {declaration}\n```")
     };
 
     if sym.deprecated {

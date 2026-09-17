@@ -83,11 +83,9 @@ pub fn analyze_includes(
     directives: &[IncludeDirective],
     file_path: &Path,
     include_paths: &[PathBuf],
-    workspace_root: Option<&Path>,
     locale: Locale,
 ) -> Vec<PawnDiagnostic> {
-    let _ = workspace_root;
-    let file_dir = file_path.parent().unwrap_or(Path::new("."));
+    let file_dir = file_path.parent().unwrap_or_else(|| Path::new("."));
 
     directives
         .iter()
@@ -187,7 +185,10 @@ pub fn collect_included_files_with(
     let root_canon = file_path
         .canonicalize()
         .unwrap_or_else(|_| file_path.to_path_buf());
-    let file_dir = file_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let file_dir = file_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
 
     let mut queue: VecDeque<(Vec<IncludeDirective>, PathBuf, PathBuf, usize)> = VecDeque::new();
     queue.push_back((directives.to_vec(), file_dir, root_canon, 1));
@@ -221,7 +222,10 @@ pub fn collect_included_files_with(
                     IncludeEntry { text, parsed }
                 });
                 let nested_dirs = entry.parsed.includes.clone();
-                let nested_dir = resolved.parent().unwrap_or(Path::new(".")).to_path_buf();
+                let nested_dir = resolved
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .to_path_buf();
                 queue.push_back((nested_dirs, nested_dir, norm, depth + 1));
             }
         }
@@ -277,7 +281,6 @@ mod tests {
             &parsed.includes,
             &main,
             &[dir.include_dir()],
-            None,
             Locale::default(),
         )
     }

@@ -221,7 +221,7 @@ fn parameter_range(cur: &str, line: u32, col: u32) -> Option<Range> {
 }
 
 /// Range que cobre a linha inteira incluindo a quebra (para removê-la por completo).
-fn full_line_range(line: u32) -> Range {
+const fn full_line_range(line: u32) -> Range {
     Range {
         start: Position { line, character: 0 },
         end: Position {

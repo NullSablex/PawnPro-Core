@@ -394,7 +394,7 @@ pub(super) fn resolve_callable(
 }
 
 #[inline]
-fn is_func_kind(kind: &SymbolKind) -> bool {
+const fn is_func_kind(kind: &SymbolKind) -> bool {
     matches!(
         kind,
         SymbolKind::Native

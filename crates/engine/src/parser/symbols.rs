@@ -180,11 +180,7 @@ fn extract_var_names(raw: &str) -> Vec<String> {
         if p.is_empty() {
             continue;
         }
-        let name_part = if let Some(c) = p.find(':') {
-            p[c + 1..].trim()
-        } else {
-            p
-        };
+        let name_part = p.find(':').map_or(p, |c| p[c + 1..].trim());
         let name: String = name_part
             .chars()
             .take_while(|c| c.is_alphanumeric() || *c == '_')
@@ -217,27 +213,16 @@ fn parse_params(raw: &str) -> Vec<Param> {
         // Remove qualificadores: const, &
         let stripped = t.trim_start_matches("const").trim_start_matches('&').trim();
         // Tenta capturar "Tag:name" ou apenas "name"
-        let (tag, name) = if let Some(colon) = stripped.find(':') {
-            let tag_part = stripped[..colon].trim().to_string();
-            let name_part = stripped[colon + 1..]
-                .trim()
-                .trim_end_matches(']')
-                .trim_end_matches('[')
-                .trim()
-                .to_string();
-            (Some(tag_part), name_part)
-        } else {
-            // Nome pode ter sufixo []
-            let name_raw = stripped
-                .split_whitespace()
-                .last()
-                .unwrap_or(stripped)
-                .trim_end_matches(']')
-                .trim_end_matches('[')
-                .trim()
-                .to_string();
-            (None, name_raw)
+        let (tag, name_part) = match stripped.split_once(':') {
+            Some((tag, name)) => (Some(tag.trim().to_string()), name.trim()),
+            None => (None, stripped.split_whitespace().last().unwrap_or(stripped)),
         };
+        // Nome pode ter sufixo []
+        let name = name_part
+            .trim_end_matches(']')
+            .trim_end_matches('[')
+            .trim()
+            .to_string();
         // Mantém apenas a parte identificador do nome (sem sufixos)
         let name = name
             .chars()
@@ -480,7 +465,7 @@ fn continue_multiline_func(
             kind: pkind,
             params: parsed_params,
             deprecated: pdep.is_deprecated,
-            deprecated_message: pdep.message.clone(),
+            deprecated_message: pdep.message,
             doc: pdoc,
             line: pidx,
             col: pcol,
@@ -569,7 +554,7 @@ impl ParserState {
 
         let stripped = strip_line_comments(raw_line, self.in_block);
         self.in_block = stripped.in_block;
-        let line = stripped.text.clone();
+        let line = stripped.text;
         let trimmed = line.trim().to_string();
 
         if let Some(mf) = self.multiline_func.take() {
@@ -661,7 +646,7 @@ impl ParserState {
                 kind: pkind,
                 params,
                 deprecated: pdep.is_deprecated,
-                deprecated_message: pdep.message.clone(),
+                deprecated_message: pdep.message,
                 doc: pdoc,
                 line: pidx,
                 col: pcol,
@@ -749,7 +734,7 @@ impl ParserState {
                 }
             } else {
                 self.result.symbols.push(Symbol {
-                    name: name.clone(),
+                    name,
                     kind: SymbolKind::Define,
                     signature: None,
                     params: vec![],
@@ -907,13 +892,13 @@ impl ParserState {
 
             // Se existe alias de namespace (NS:: → NS_), registra com nome expandido
             let effective_name = if namespace_raw.is_empty() {
-                func_name.clone()
+                func_name
             } else {
                 let ns = namespace_raw.trim_end_matches(':').trim_end_matches(':');
                 if let Some(alias) = self.result.namespace_aliases.get(ns) {
                     format!("{alias}{func_name}")
                 } else {
-                    func_name.clone()
+                    func_name
                 }
             };
 

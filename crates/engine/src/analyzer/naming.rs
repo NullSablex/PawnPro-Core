@@ -77,7 +77,7 @@ pub fn analyze_naming(
 /// Categoria de um símbolo de topo escrito pelo usuário, ou `None` quando não se
 /// avalia (nativas/forwards de include — API externa cujo nome o autor não
 /// controla). `Enum` é o nome do tipo; tratado como constante por convenção.
-fn category_of(kind: &SymbolKind) -> Option<NameCategory> {
+const fn category_of(kind: &SymbolKind) -> Option<NameCategory> {
     match kind {
         SymbolKind::Stock | SymbolKind::Public | SymbolKind::Static | SymbolKind::Plain => {
             Some(NameCategory::Function)
