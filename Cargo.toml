@@ -12,6 +12,8 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE.md"
+# Não sai no crates.io: é distribuído como binário, no release e no VSIX.
+publish = false
 repository = "https://github.com/NullSablex/PawnPro-Core"
 
 [workspace.dependencies]

@@ -48,3 +48,15 @@ cargo update                                  # within semver, touches Cargo.loc
 cargo search <crate> --limit 20               # check for a higher version
 cargo test --workspace                        # before committing the lock
 ```
+
+## Dependency licenses
+
+The binaries redistribute the libraries compiled into them, and their licenses
+require shipping the notices along. The release generates
+`pawnpro-core-THIRD-PARTY.txt` and `pawnpro_debug-THIRD-PARTY.txt` with
+`cargo-about`, and the extension packages the former next to the binary.
+
+`about.toml` lists the accepted licenses. A new dependency under a license
+outside the list breaks the release: accepting it is a decision, not a side
+effect of `cargo update`. The workspace's own crates have `publish = false` and
+are left out — they are covered by the PawnPro-Core license.

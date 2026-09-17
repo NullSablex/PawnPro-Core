@@ -15,15 +15,22 @@ As três crates — core, engine e depurador — compartilham a mesma versão e 
 ### Adicionado
 
 - **Núcleo**: JSON-RPC sobre stdio para a extensão, supervisor dos subsistemas, e tudo o que depende do sistema operacional — processos, portas, RCON, compilador e configuração.
-- **Hospedagem da engine**: ela sobe numa thread supervisionada e atende LSP num soquete Unix dentro de um diretório `0700` — named pipe no Windows —, com o endereço reservado uma vez e mantido entre reinícios. Métodos `engine.start`, `engine.stop`, `engine.status` e `engine.reload`.
+- **Hospedagem da engine**: ela sobe numa thread supervisionada e atende LSP num soquete Unix dentro de um diretório `0700` — named pipe no Windows —, com o endereço reservado uma vez e mantido entre reinícios. `engine.start` devolve o endereço.
 - **O núcleo é a única fonte da configuração da engine**: lê o `config.json` global e o do projeto, resolve includes, SDK, formatação e as listas `.ban`/`.allow`, e entrega tudo pronto por um canal interno tipado. Um observador confere os arquivos a cada dois segundos e reentrega quando mudam; a engine republica os diagnósticos sem o editor pedir. Trocar de projeto move a observação junto.
-- **Registro de diagnóstico** em `.pawnpro/logs/`, com níveis `off`/`error`/`warn`/`info`. Cada evento vai para o `pawnpro.log` unificado e para o arquivo do componente que o produziu. Desligado por padrão: nada é escrito e nenhum arquivo é criado. Métodos `log.configure`, `log.write`, `log.path` e `log.clear`, para a extensão alimentar o mesmo arquivo. A engine registra pelo mesmo caminho, por um sink que o núcleo injeta.
+- **Registro de diagnóstico** em `.pawnpro/logs/`, com níveis `off`/`error`/`warn`/`info`. Cada evento vai para o `pawnpro.log` unificado e para o arquivo do componente que o produziu. Desligado por padrão: nada é escrito e nenhum arquivo é criado. Métodos `log.configure`, `log.write` e `log.clear`, para a extensão alimentar o mesmo arquivo. A engine registra pelo mesmo caminho, por um sink que o núcleo injeta.
 - `read_list_file` passa a respeitar um teto de tamanho, que era da engine.
-- **Plugin de depuração do servidor** (`pawnpro_debug.so` / `pawnpro_debug.dll`) e o protocolo que ele fala passam a viver aqui, em `crates/debugger/`, e saem no mesmo release do núcleo — **instáveis para uso**. O adaptador DAP ainda não entrou.
+- **Plugin de depuração do servidor** (`pawnpro_debug.so` / `pawnpro_debug.dll`) e o protocolo que ele fala passam a viver aqui, em `crates/debugger/`, e saem no mesmo release do núcleo — **instáveis para uso**.
 - **Configuração, estado, compilador e includes pelo núcleo**: métodos `config.*`, `state.*`, `compiler.buildArgs`/`compiler.detect` e `includes.*` (`paths`, `listFiles`, `listNatives`, `resolveSdk`), cada grupo em módulo próprio. A configuração tem um dono só, que avisa a extensão por `config.changed` quando o arquivo muda; a leitura tolera campo a campo, e um valor inválido cai no padrão sem descartar o resto. Um teste de contrato confere o que a engine recebe.
 - **Engine — unidade de compilação.** Hover, assinatura, autocomplete, referências, contador e a verificação de símbolos não usados enxergam o que é compilado junto com o arquivo: cada programa que o inclui, com tudo o que esse programa inclui — o `.inc` irmão entra, inclusive fechado; um programa à parte nunca, mesmo com funções de mesmo nome. Programa é o `.pwn` que nenhum arquivo do projeto inclui: um `.pwn` incluído é trecho.
 - **Engine — ir para definição** (`textDocument/definition`): o arquivo, os includes e o resto da unidade, nessa ordem; num `forward`, vai ao corpo.
 - **Engine — renomear com escopo.** Um local vale do `new` que o declara até o fim do bloco dele — num `for (new i …)`, só no `for` —, e um parâmetro, na própria função. Renomear uma `public` atualiza também as strings que são exatamente o nome, como em `SetTimer("Nome", …)`. Renomear uma variável global cujo nome também é local ou parâmetro na unidade é recusado, com o motivo e o lugar do conflito, nos cinco idiomas.
+- **Soquete único**: LSP, DAP e o plugin do servidor chegam pelo mesmo endereço, e cada conexão diz na primeira linha a que canal pertence (`PAWNPRO/1 lsp|dap|plugin`). O plugin passa a ser cliente, com endpoint e sessão recebidos pelo ambiente.
+- **Adaptador DAP no núcleo** (`crates/debugger/adapter`), como biblioteca supervisionada: `debug.start` devolve o endereço, e cada sessão sobe e derruba o servidor do jogo. Parar leva milissegundos.
+- **Depurador — breakpoints com o fonte editado**: o texto de cada arquivo é guardado na compilação, e as linhas do editor são levadas às do binário em execução por diff. `.amx` sem bloco de debug é recompilado no início e no reinício.
+- **Depurador — só o programa depurado**: o plugin reconhece a VM pelo conteúdo do `.amx` e instala o controle só nela; filterscripts deixam de disparar os breakpoints do gamemode.
+- **Depurador — arrays**: elementos de arrays multidimensionais e passados por referência, com data breakpoint e edição confirmada pelo plugin.
+- Métodos `compiler.run` (em segundo plano, sem prender as outras requisições), `server.resolve`, `server.readLog`, `server.sensitiveCommands`, `project.changelogSection` e `config.inlineNamingLists`, que substituem as cópias em TypeScript da extensão.
+- **Avisos de terceiros**: o release publica `pawnpro-core-THIRD-PARTY.txt` e `pawnpro_debug-THIRD-PARTY.txt`, gerados pelo `cargo-about`; uma licença fora de `about.toml` impede o release.
 - **Engine — sonda contra um projeto real** (`PAWNPRO_PROBE_PROJECT`): passa cada arquivo pela análise, pelos tokens semânticos e pela formatação, e cobra que nada entre em pane, que a formatação não mude código nem comentário e que formatar de novo não mude nada. Mede onde vai o tempo da análise e confere dois cenários de unidade de compilação.
 
 ### Alterado
@@ -51,8 +58,11 @@ As três crates — core, engine e depurador — compartilham a mesma versão e 
 - **Engine — renomear um parâmetro** alterava todo nome igual da unidade inteira.
 - **Engine — `PP0012`** não disparava, e a verificação de não usados não via uma edição em outro arquivo.
 - `native`/`forward` e `#include` deixam de ter `expect`/`unwrap` implícitos no parser.
+- **Codificações**: os nomes da configuração `windows1250`, `windows1251` e `windows1253` a `windows1257` não são rótulos do `encoding_rs` e caíam no windows-1252; agora cada um chega à sua página de código.
+- **Engine — títulos das correções rápidas** eram texto fixo em português; agora vêm das mensagens traduzidas.
 
 ### Removido
 
 - `EngineConfig::load` e a leitura dos arquivos de lista; `SdkConfig`, que ninguém mais lia — o SDK chega resolvido.
+- Métodos RPC sem uso: `engine.stop`, `engine.status`, `engine.reload`, `log.path`, `config.get`, `server.detectType` e `server.detectExecutable`.
 - O módulo `ui/` do núcleo: temas, cor de destaque, idioma das páginas e cores são da extensão, que os desenha.

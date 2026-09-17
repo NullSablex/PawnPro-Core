@@ -1,0 +1,23 @@
+# Licenças aceitas nas dependências que entram nos binários publicados. Uma
+# dependência nova fora desta lista faz o `cargo about generate` falhar: a
+# decisão de aceitá-la tem de ser explícita.
+accepted = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+]
+
+# Só o que é compilado nos binários: dependências de teste e de build não são
+# distribuídas.
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
+
+# As crates do próprio workspace (`publish = false`) são cobertas pela licença
+# PawnPro-Core, não por avisos de terceiros.
+private = { ignore = true }

@@ -73,6 +73,40 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # Os binários redistribuem bibliotecas de terceiros compiladas neles, e as
+  # licenças delas (MIT, Apache-2.0…) exigem levar os avisos junto. Uma licença
+  # fora da lista de `about.toml` faz este job falhar, e o release não sai.
+  licenses:
+    name: Third-party notices
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Install cargo-about
+        run: cargo install cargo-about --version 0.9.2 --features cli --locked
+
+      - name: Generate notices
+        run: |
+          cargo about generate --fail -m crates/core/Cargo.toml about.hbs -o pawnpro-core-THIRD-PARTY.txt
+          cargo about generate --fail -m crates/debugger/plugin/Cargo.toml about.hbs -o pawnpro_debug-THIRD-PARTY.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: third-party-notices
+          path: |
+            pawnpro-core-THIRD-PARTY.txt
+            pawnpro_debug-THIRD-PARTY.txt
+          retention-days: 1
+          if-no-files-found: error
+
   build:
     name: Build ${{ matrix.artifact }}
     runs-on: ${{ matrix.os }}
@@ -160,7 +194,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [build, build-plugin]
+    needs: [build, build-plugin, licenses]
     runs-on: ubuntu-latest
     permissions:
       contents: write
