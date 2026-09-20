@@ -12,6 +12,8 @@ docs_dir: docs
 theme:
   name: material
   language: pt-BR
+  logo: logo.png
+  favicon: icon.svg
   features:
     - navigation.tabs
     - navigation.tabs.sticky
