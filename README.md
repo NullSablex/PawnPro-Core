@@ -122,7 +122,12 @@ português e inglês.
 
 | | |
 |---|---|
-| [Arquitetura](docs/architecture.md) | As peças e por que estão assim |
+| [Arquitetura](docs/architecture.md) | As peças, o soquete único e por que o desenho é assim |
+| [O contrato com a extensão](docs/rpc.md) | Os métodos JSON-RPC e o que é do núcleo |
+| [Configuração e projeto](docs/configuration.md) | Escopos, listas de nomes, includes e o compilador |
+| [O servidor do jogo](docs/server.md) | Executável, portas, processos, log e RCON |
+| [A engine](docs/engine.md) | Unidade de compilação, cache, diagnósticos e formatação |
+| [Depuração](docs/debugger.md) | Adaptador, plugin e o que acontece numa sessão |
 | [Supervisão](docs/supervision.md) | Como um subsistema cai e volta sem levar o resto |
 | [Dependências](docs/dependencies.md) | O que cada uma resolve, o perfil de release e as licenças |
 
@@ -136,5 +141,5 @@ co-autoria de IA, e sem preconceito quanto ao seu uso.
 
 ## Licença
 
-PawnPro-Core License v1.1 — Source-Available (não Open Source).  
+PawnPro-Core License v1.0 — Source-Available (não Open Source).  
 Uso pessoal e comercial permitido ✅ · Redistribuição gratuita com atribuição ✅ · Venda proibida ❌ · Detalhes: [LICENSE.md](LICENSE.md)

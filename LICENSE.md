@@ -1,5 +1,5 @@
 # Licença PawnPro-Core (PawnPro-Core License)
-**Versão 1.1 - 2026**
+**Versão 1.0 - 2026**
 
 Copyright (c) 2025-2026 NullSablex  
 Os direitos não concedidos expressamente nesta licença ficam reservados ao autor.
@@ -24,7 +24,7 @@ Os direitos não concedidos expressamente nesta licença ficam reservados ao aut
 
 ## 1. DEFINIÇÕES
 
-**"Software"** refere-se ao PawnPro-Core — o núcleo (`pawnpro-core`), a engine (`pawnpro-engine`), o plugin de depuração (`pawnpro-debug-plugin`), o protocolo de depuração (`pawnpro-dbg-protocol`) — e todo seu código-fonte, documentação e arquivos relacionados.
+**"Software"** refere-se ao PawnPro-Core — o núcleo (`pawnpro-core`), a engine (`pawnpro-engine`), o adaptador de depuração (`pawnpro-dap-adapter`), o protocolo de depuração (`pawnpro-dbg-protocol`) e o plugin de depuração (`pawnpro-debug-plugin`) — e todo seu código-fonte, documentação e arquivos relacionados.
 
 **"Você"** refere-se à pessoa física ou jurídica exercendo as permissões concedidas por esta licença.
 
@@ -194,4 +194,4 @@ Esta é uma **licença de código-fonte disponível (source-available)**, não u
 https://github.com/NullSablex/PawnPro-Core/issues
 
 **Última atualização:** Setembro 2026  
-**Versão da Licença:** 1.1
+**Versão da Licença:** 1.0
