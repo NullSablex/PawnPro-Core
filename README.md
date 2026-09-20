@@ -7,6 +7,8 @@
   [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/NullSablex/PawnPro-Core/badge?style=flat-square)](https://scorecard.dev/viewer/?uri=github.com/NullSablex/PawnPro-Core)
   [![Release](https://img.shields.io/github/v/release/NullSablex/PawnPro-Core?style=flat-square&logo=github&label=release)](https://github.com/NullSablex/PawnPro-Core/releases)
   [![Downloads](https://img.shields.io/github/downloads/NullSablex/PawnPro-Core/total?style=flat-square&logo=github&label=downloads)](https://github.com/NullSablex/PawnPro-Core/releases)
+  [![Stars](https://img.shields.io/github/stars/NullSablex/PawnPro-Core?style=flat-square&logo=github&label=stars)](https://github.com/NullSablex/PawnPro-Core/stargazers)
+  [![Issues](https://img.shields.io/github/issues/NullSablex/PawnPro-Core?style=flat-square&logo=github&label=issues)](https://github.com/NullSablex/PawnPro-Core/issues)
   [![License](https://img.shields.io/badge/licença-Source--Available-blue?style=flat-square)](LICENSE.md)
 
   ![Rust](https://img.shields.io/badge/Rust-edição%202024-000000?style=flat-square&logo=rust&logoColor=white)
