@@ -107,6 +107,9 @@ nav:
   - Início: index.md
   - Interno:
       - Arquitetura: architecture.md
+      - O contrato com a extensão: rpc.md
+      - A engine: engine.md
+      - Depuração: debugger.md
       - Supervisão: supervision.md
       - Dependências e build: dependencies.md
 

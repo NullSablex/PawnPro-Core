@@ -18,18 +18,40 @@ from an indirect signal, and every signal had a different shape per OS.
 
 ```
 editor ──► extension (TS) ──► pawnpro-core (single binary)
-                     │             │
-                     │             ├── engine    (crate, supervised thread)
-                     │             ├── debugger  (crate, supervised thread)
-                     │             └── server    (module: RCON, processes, ports)
-                     │                     └──► omp-server
-                     └──► LSP ──► local socket (Unix) / named pipe (Windows)
+              │                    │
+              │                    ├── engine   (crate, supervised thread)
+              │                    ├── adapter  (crate, one thread per session)
+              │                    └── server   (module: RCON, processes, ports)
+              │                              └──► omp-server ──► plugin
+              │                                                     │
+              └── LSP and DAP ──► local socket ◄────────────────────┘
+                                  (Unix; named pipe on Windows)
 ```
 
-The core's JSON-RPC travels over stdio; LSP would not fit in the same channel,
-so the engine listens on a socket of its own. The extension asks for the address
-(`engine.start`, `engine.settings`) and points its client at it. Whoever owns
-`omp-server` is now who answers for it.
+The core's JSON-RPC travels over stdio; LSP and DAP would not fit in the same
+channel, so there is a socket. The extension asks for the address
+(`engine.start` for IntelliSense, `debug.start` for a debug session) and points
+its client at it. Whoever owns `omp-server` is now who answers for it.
+
+## One socket, three channels
+
+There is a single address, and every connection states its channel on the first
+line:
+
+```
+PAWNPRO/1 lsp                  ← the editor's LSP client
+PAWNPRO/1 dap                  ← the editor's debug session
+PAWNPRO/1 plugin <session>     ← the plugin, from inside the game server
+```
+
+One socket per subsystem would multiply addresses, directories and cleanup to
+solve the same problem three times. The greeting is a single text line, read
+byte by byte with a deadline and a maximum length: a connection that does not
+introduce itself is dropped, and none of them reaches the wrong subsystem.
+
+The plugin gets the address and the session id from the environment when the
+adapter starts the game server. That id is what binds the plugin to the right
+session when more than one is open.
 
 **Not TCP on loopback.** LSP authenticates no one, and the engine reads from
 disk whatever path the incoming URI points at: on a local port, any process on

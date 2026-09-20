@@ -18,18 +18,39 @@ sinal tinha um jeito diferente por sistema operacional.
 
 ```
 editor ──► extensão (TS) ──► pawnpro-core (um binário)
-                    │             │
-                    │             ├── engine    (crate, thread supervisionada)
-                    │             ├── debugger  (crate, thread supervisionada)
-                    │             └── server    (módulo: RCON, processos, portas)
-                    │                     └──► omp-server
-                    └──► LSP ──► soquete local (Unix) / named pipe (Windows)
+              │                   │
+              │                   ├── engine    (crate, thread supervisionada)
+              │                   ├── adaptador (crate, uma thread por sessão)
+              │                   └── server    (módulo: RCON, processos, portas)
+              │                             └──► omp-server ──► plugin
+              │                                                    │
+              └── LSP e DAP ──► soquete local ◄────────────────────┘
+                                (Unix; named pipe no Windows)
 ```
 
-O JSON-RPC do core viaja no stdio; o LSP não caberia no mesmo canal, então a
-engine atende num soquete próprio. A extensão pergunta o endereço
-(`engine.start`, `engine.settings`) e liga o cliente nele. Quem possui o
-`omp-server` passa a ser quem responde sobre ele.
+O JSON-RPC do core viaja no stdio; LSP e DAP não caberiam no mesmo canal, então
+há um soquete. A extensão pergunta o endereço (`engine.start` para o
+IntelliSense, `debug.start` para uma sessão de depuração) e liga o cliente nele.
+Quem possui o `omp-server` passa a ser quem responde sobre ele.
+
+## Um soquete, três canais
+
+O endereço é um só, e cada conexão diz na primeira linha a que canal pertence:
+
+```
+PAWNPRO/1 lsp                  ← o cliente LSP do editor
+PAWNPRO/1 dap                  ← a sessão de depuração do editor
+PAWNPRO/1 plugin <sessão>      ← o plugin, de dentro do servidor do jogo
+```
+
+Um soquete por subsistema multiplicaria endereços, diretórios e limpeza para
+resolver o mesmo problema três vezes. A saudação é uma linha de texto, lida byte
+a byte com prazo e tamanho máximo: uma conexão que não se apresente é
+descartada, e nenhuma delas chega ao subsistema errado.
+
+O plugin recebe o endereço e o id da sessão pelo ambiente, quando o adaptador
+sobe o servidor do jogo. É o id que liga o plugin à sessão certa quando há mais
+de uma aberta.
 
 **Não é TCP em loopback.** O LSP não autentica ninguém, e a engine lê do disco
 o arquivo que a URI recebida apontar: numa porta local, qualquer processo da

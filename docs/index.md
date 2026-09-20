@@ -1,9 +1,8 @@
 # PawnPro Core
 
-Núcleo em Rust do [PawnPro](https://github.com/NullSablex/PawnPro). Supervisiona
-os subsistemas que a extensão usava como processos separados — a engine (LSP) e
-o depurador (DAP) — e concentra as operações que dependem do sistema
-operacional.
+Núcleo em Rust do [PawnPro](https://github.com/NullSablex/PawnPro). Hospeda os
+subsistemas que a extensão usava como processos separados — a engine (LSP) e o
+depurador (DAP) — e concentra as operações que dependem do sistema operacional.
 
 ## Por que existe
 
@@ -19,11 +18,13 @@ O core inverte isso: **quem possui o processo é quem responde sobre ele**.
 
 | Crate | Responsabilidade |
 |---|---|
-| `crates/core` | Supervisor e tudo que depende do sistema operacional |
-| `crates/engine` | Análise de Pawn e LSP |
-| `crates/debugger` | DAP e o servidor do jogo *(a migrar)* |
+| `crates/core` | O binário `pawnpro-core`: JSON-RPC com a extensão, supervisor, soquete e tudo que depende do sistema operacional |
+| `crates/engine` | Análise de Pawn e LSP, como biblioteca |
+| `crates/debugger/adapter` | Adaptador DAP, como biblioteca |
+| `crates/debugger/protocol` | O protocolo entre o adaptador e o plugin |
+| `crates/debugger/plugin` | O plugin do servidor (`pawnpro_debug.so` / `.dll`), de 32 bits |
 
-Três crates, e só elas: as peças arquiteturais. Responsabilidades internas —
+Uma crate por peça arquitetural. Responsabilidades internas —
 RCON, processos, portas — são **módulos** da crate a que pertencem
 (`core/src/server/`), não crates próprias: multiplicar crates para cada função
 criaria fronteiras sem separar nada.
@@ -34,6 +35,9 @@ levar os outros junto.
 
 ## Estado
 
-Em construção. O core já concentra o RCON, os processos e a configuração, e
-hospeda a engine num soquete local que ele supervisiona. Falta o
-depurador — ver [Arquitetura](architecture.md) e [Supervisão](supervision.md).
+O núcleo concentra o RCON, os processos, as portas, o compilador, a configuração
+e o estado do projeto, e hospeda a engine e o adaptador de depuração num soquete
+local que ele supervisiona. **A depuração é instável**: funciona no uso descrito
+na documentação da extensão, mas ainda pode falhar.
+
+Ver [Arquitetura](architecture.md) e [Supervisão](supervision.md).

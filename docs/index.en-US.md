@@ -1,6 +1,6 @@
 # PawnPro Core
 
-Rust core of [PawnPro](https://github.com/NullSablex/PawnPro). It supervises the
+Rust core of [PawnPro](https://github.com/NullSablex/PawnPro). It hosts the
 subsystems the extension used to run as separate processes — the engine (LSP)
 and the debugger (DAP) — and owns every operation that depends on the operating
 system.
@@ -19,11 +19,13 @@ The core inverts that: **whoever owns the process answers for it**.
 
 | Crate | Responsibility |
 |---|---|
-| `crates/core` | Supervisor, and everything that depends on the OS |
-| `crates/engine` | Pawn analysis and LSP |
-| `crates/debugger` | DAP and the game server *(to migrate)* |
+| `crates/core` | The `pawnpro-core` binary: JSON-RPC with the extension, supervisor, socket, and everything that depends on the OS |
+| `crates/engine` | Pawn analysis and LSP, as a library |
+| `crates/debugger/adapter` | DAP adapter, as a library |
+| `crates/debugger/protocol` | The protocol between adapter and plugin |
+| `crates/debugger/plugin` | The server plugin (`pawnpro_debug.so` / `.dll`), 32-bit |
 
-Three crates, and only those: the architectural pieces. Internal
+One crate per architectural piece. Internal
 responsibilities — RCON, processes, ports — are **modules** of the crate they
 belong to (`core/src/server/`), not crates of their own: one crate per function
 would multiply boundaries without separating anything.
@@ -34,6 +36,9 @@ taking the others down.
 
 ## Status
 
-Under construction. The core already owns RCON, processes and configuration,
-and hosts the engine on a local socket it supervises. The debugger is still
-missing — see [Architecture](architecture.md) and [Supervision](supervision.md).
+The core owns RCON, processes, ports, the compiler, configuration and project
+state, and hosts both the engine and the debug adapter on a local socket it
+supervises. **Debugging is unstable**: it works for the usage described in the
+extension's documentation, but it can still fail.
+
+See [Architecture](architecture.md) and [Supervision](supervision.md).
