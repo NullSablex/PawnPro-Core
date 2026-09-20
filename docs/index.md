@@ -33,6 +33,19 @@ Crates separados, um binário só. A separação não é cosmética: o `Cargo.to
 cada um impede acoplamento acidental, e é o que permite um subsistema cair sem
 levar os outros junto.
 
+## Por onde começar
+
+| Página | O que responde |
+|---|---|
+| [Arquitetura](architecture.md) | As peças, o soquete único e por que o desenho é assim |
+| [O contrato com a extensão](rpc.md) | Os métodos JSON-RPC e o que é do núcleo |
+| [Configuração e projeto](configuration.md) | Escopos, listas de nomes, includes e o compilador |
+| [O servidor do jogo](server.md) | Executável, portas, processos, log e RCON |
+| [A engine](engine.md) | Unidade de compilação, cache, diagnósticos e formatação |
+| [Depuração](debugger.md) | Adaptador, plugin e o que acontece numa sessão |
+| [Supervisão](supervision.md) | Como um subsistema cai e volta sem levar o resto |
+| [Dependências e build](dependencies.md) | O que cada dependência resolve, o perfil de release e as licenças |
+
 ## Estado
 
 O núcleo concentra o RCON, os processos, as portas, o compilador, a configuração

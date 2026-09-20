@@ -108,6 +108,8 @@ nav:
   - Interno:
       - Arquitetura: architecture.md
       - O contrato com a extensão: rpc.md
+      - Configuração e projeto: configuration.md
+      - O servidor do jogo: server.md
       - A engine: engine.md
       - Depuração: debugger.md
       - Supervisão: supervision.md

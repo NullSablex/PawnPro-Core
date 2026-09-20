@@ -12,7 +12,11 @@ o motivo de uma escolha envelhece em ritmo diferente do número dela.
 | `regex` | núcleo, engine | Varredura de fontes Pawn e dos arquivos de configuração do servidor. |
 | `encoding_rs` | núcleo | A saída do `pawncc` vem em windows-1252 na maioria das builds. É o equivalente ao `iconv-lite` que a extensão usava. |
 | `sysinfo` | núcleo | Inspeção de processos multiplataforma. Substitui os caminhos por sistema que a extensão mantinha à mão — `/proc`, `ps`, `Get-Process`, `taskkill`. |
-| `tokio` | núcleo, engine | O runtime da engine e o soquete em que ela atende. O núcleo pede só `rt-multi-thread`, `net` e `time`: o prazo do `accept` é o que deixa o encerramento chegar. |
+| `tokio` | núcleo, engine | O runtime da engine e o soquete em que ela atende. O núcleo pede só `rt-multi-thread`, `net`, `time` e `io-util`: o prazo do `accept` é o que deixa o encerramento chegar. |
+| `tokio-util` | núcleo | Liga os fluxos assíncronos do soquete ao adaptador de depuração, que é síncrono. |
+| `interprocess` | núcleo | O named pipe do Windows, equivalente ao soquete Unix. |
+| `similar` | depurador | O diff de linhas entre o fonte compilado e o texto atual, que leva o breakpoint à linha certa. Sem `default-features`: só o algoritmo de texto. |
+| `rust-samp-sdk` | depurador | A interface com a máquina virtual do Pawn, usada pelo plugin do servidor. |
 | `tower-lsp` | engine | O protocolo LSP. |
 | `walkdir`, `dashmap`, `futures` | engine | Varredura do workspace, cache de documentos abertos e composição das análises. |
 

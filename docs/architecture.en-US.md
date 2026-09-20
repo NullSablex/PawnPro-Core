@@ -90,7 +90,7 @@ Inherited from the work that motivated this migration, and equally valid here:
 1. **The port is the only proof.** An open terminal, a received event, a
    dispatched command — none of them mean the server is up.
 2. **Asking is not finishing.** A UDP `send` returning `Ok` does not mean anyone
-   received it. That is why [`RconClient::send`](supervision.md#rcon) probes first.
+   received it. That is why [`RconClient::send`](server.md#rcon) probes first.
 3. **Expiring state does not drive control flow.** Loss tolerance is for
    display, never for deciding what to do.
 4. **Errors are enums, not strings.** Every condition the UI must tell apart

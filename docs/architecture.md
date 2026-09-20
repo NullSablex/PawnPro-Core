@@ -89,7 +89,7 @@ Herdados da frente que motivou esta migração, e válidos aqui igualmente:
 1. **A porta é a única prova.** Terminal aberto, evento recebido, comando
    despachado — nada disso significa que o servidor está no ar.
 2. **Pedir não é concluir.** Um `send` UDP que retorna `Ok` não diz que alguém
-   recebeu. É por isso que [`RconClient::send`](supervision.md#rcon) sonda antes.
+   recebeu. É por isso que [`RconClient::send`](server.md#rcon) sonda antes.
 3. **Estado que caduca não decide fluxo.** Tolerância a perdas serve para
    exibição, nunca para escolher o que fazer.
 4. **Erro é `enum`, não string.** Cada condição que a interface precisa

@@ -12,7 +12,11 @@ and the reason behind a choice ages at a different pace than its number.
 | `regex` | core, engine | Scanning Pawn sources and the server's configuration files. |
 | `encoding_rs` | core | `pawncc` output comes in windows-1252 on most builds. It is the counterpart of the `iconv-lite` the extension used. |
 | `sysinfo` | core | Cross-platform process inspection. Replaces the per-OS paths the extension kept by hand — `/proc`, `ps`, `Get-Process`, `taskkill`. |
-| `tokio` | core, engine | The engine's runtime and the socket it listens on. The core asks only for `rt-multi-thread`, `net` and `time`: the `accept` deadline is what lets shutdown get through. |
+| `tokio` | core, engine | The engine's runtime and the socket it listens on. The core asks only for `rt-multi-thread`, `net`, `time` and `io-util`: the `accept` deadline is what lets shutdown get through. |
+| `tokio-util` | core | Bridges the socket's async streams to the debug adapter, which is synchronous. |
+| `interprocess` | core | The Windows named pipe, the counterpart of the Unix socket. |
+| `similar` | debugger | The line diff between the compiled source and the current text, which takes a breakpoint to the right line. Without `default-features`: the text algorithm only. |
+| `rust-samp-sdk` | debugger | The interface to the Pawn virtual machine, used by the server plugin. |
 | `tower-lsp` | engine | The LSP protocol. |
 | `walkdir`, `dashmap`, `futures` | engine | Workspace scanning, the open-document cache, and composing the analyses. |
 

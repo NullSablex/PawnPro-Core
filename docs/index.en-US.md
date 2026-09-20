@@ -25,14 +25,27 @@ The core inverts that: **whoever owns the process answers for it**.
 | `crates/debugger/protocol` | The protocol between adapter and plugin |
 | `crates/debugger/plugin` | The server plugin (`pawnpro_debug.so` / `.dll`), 32-bit |
 
-One crate per architectural piece. Internal
-responsibilities — RCON, processes, ports — are **modules** of the crate they
-belong to (`core/src/server/`), not crates of their own: one crate per function
-would multiply boundaries without separating anything.
+One crate per architectural piece. Internal responsibilities — RCON, processes,
+ports — are **modules** of the crate they belong to (`core/src/server/`), not
+crates of their own: one crate per function would multiply boundaries without
+separating anything.
 
 Separate crates, a single binary. The split is not cosmetic: each `Cargo.toml`
 prevents accidental coupling, and it is what lets one subsystem fail without
 taking the others down.
+
+## Where to start
+
+| Page | What it answers |
+|---|---|
+| [Architecture](architecture.md) | The pieces, the single socket, and why the design is like this |
+| [The contract with the extension](rpc.md) | The JSON-RPC methods and what belongs to the core |
+| [Configuration and project](configuration.md) | Scopes, name lists, includes, and the compiler |
+| [The game server](server.md) | Executable, ports, processes, log, and RCON |
+| [The engine](engine.md) | Compilation unit, cache, diagnostics, and formatting |
+| [Debugging](debugger.md) | Adapter, plugin, and what happens during a session |
+| [Supervision](supervision.md) | How a subsystem falls and comes back without taking the rest |
+| [Dependencies and build](dependencies.md) | What each dependency solves, the release profile, and the licenses |
 
 ## Status
 
