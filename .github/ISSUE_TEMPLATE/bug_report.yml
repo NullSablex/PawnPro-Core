@@ -1,0 +1,73 @@
+name: Relatar um bug
+description: Comportamento incorreto na análise, na depuração, no servidor ou na compilação.
+labels: ["fix"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Este repositório é o núcleo nativo. Problemas de interface do editor vão
+        para o [repositório da extensão](https://github.com/NullSablex/PawnPro/issues).
+
+        Para vulnerabilidades de segurança, **não** abra uma issue — veja o
+        [SECURITY.md](https://github.com/NullSablex/PawnPro-Core/blob/master/SECURITY.md).
+
+  - type: textarea
+    id: descricao
+    attributes:
+      label: Descrição
+      description: O que aconteceu e o que você esperava que acontecesse.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproducao
+    attributes:
+      label: Passos para reproduzir
+      description: Os passos mínimos para o problema aparecer.
+      placeholder: |
+        1. Abrir um projeto com ...
+        2. Fazer ...
+        3. Observar ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Onde acontece
+      options:
+        - Análise de código (IntelliSense, diagnósticos, formatação)
+        - Depuração
+        - Servidor (RCON, portas, processos, log)
+        - Compilação
+        - Configuração
+        - Não sei
+    validations:
+      required: true
+
+  - type: input
+    id: versoes
+    attributes:
+      label: Versões
+      description: A do núcleo e a da extensão, em "PawnPro. Ajuda e informações".
+      placeholder: "núcleo 0.1.0, extensão 4.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: ambiente
+    attributes:
+      label: Sistema e servidor
+      placeholder: "Linux x64, open.mp 1.4"
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Registro de diagnóstico
+      description: |
+        Ligue em "PawnPro: Nível do diagnóstico", reproduza e cole o trecho
+        relevante de `.pawnpro/logs/pawnpro.log`. **Revise antes**: ele contém
+        caminhos do seu projeto.
+      render: text

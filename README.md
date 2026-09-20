@@ -137,9 +137,14 @@ português e inglês.
 
 As issues e os pull requests desta parte do projeto ficam aqui; o que é da
 interface vai para o [repositório da extensão](https://github.com/NullSablex/PawnPro).
+O [guia de contribuição](CONTRIBUTING.md) tem o ambiente, a verificação e as
+regras de código; dúvidas de uso, em [SUPPORT.md](SUPPORT.md).
 
 O uso de **IA** é permitido: quem contribui é responsável pelo que envia, sem
-co-autoria de IA, e sem preconceito quanto ao seu uso.
+co-autoria de IA, e sem preconceito quanto ao seu uso — ver
+[AI-POLICY.md](AI-POLICY.md).
+
+Vulnerabilidade não vai em issue pública: ver [SECURITY.md](SECURITY.md).
 
 ## Licença
 

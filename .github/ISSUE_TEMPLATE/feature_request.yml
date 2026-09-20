@@ -1,0 +1,31 @@
+name: Sugerir um recurso
+description: Propor uma funcionalidade ou melhoria no núcleo.
+labels: ["feat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Descreva o problema que a ideia resolve, não só a solução. Se for sobre
+        a interface do editor, use o
+        [repositório da extensão](https://github.com/NullSablex/PawnPro/issues).
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema ou motivação
+      description: O que hoje não dá para fazer, ou custa caro demais.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Proposta
+      description: Como você imagina que funcionaria.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
