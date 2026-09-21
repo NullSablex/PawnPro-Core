@@ -90,6 +90,25 @@ empacota e o consome.
   breakpoint e na edição, que só é dada como feita quando o plugin confirma.
 - **Erros de runtime** pausam com a mensagem no idioma configurado.
 
+#### Documentação e projeto
+
+- **Documentação publicada** em <https://pawnpro-core.nullsablex.com/>, gerada de
+  `docs/` pelo MkDocs: arquitetura, RPC, engine, depurador, servidor,
+  configuração, supervisão e dependências. A base é o português, e cada página
+  tem tradução em `*.en-US.md`; a identidade visual é a mesma da extensão,
+  porque o núcleo não é um produto à parte. As dependências do site são fixadas
+  por hash.
+- **Políticas e modelos**: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`,
+  `CODE_OF_CONDUCT.md`, `AI-POLICY.md` e `THIRD-PARTY-NOTICES.md`, mais os
+  modelos de issue (defeito e pedido de recurso) e de pull request. Quem chega
+  pela primeira vez recebe uma saudação automática na primeira issue ou PR,
+  e só nela.
+- **CI**: verificação igual à local (`cargo fmt --all --check`, clippy pedantic
+  com `-D warnings`, `cargo test --workspace`), CodeQL, OpenSSF Scorecard — este
+  só em repositório público — e o workflow de release, que publica num release só
+  o binário por plataforma, o plugin i686, os avisos de licença e os checksums.
+  As versões das ações do CI são fixadas.
+
 ### Alterado, em relação aos projetos separados
 
 - **A engine deixa de ser um binário próprio** e vira biblioteca: `serve` recebe
