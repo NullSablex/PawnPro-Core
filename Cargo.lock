@@ -131,13 +131,12 @@ checksum = "c2db04e74f0a9a93103b50e90b96024c9b2bdca8bce6a632ec71b88736d3d359"
 
 [[package]]
 name = "encoding_rs"
-version = "0.8.41"
+version = "0.8.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b5ef0006ac9ab233c38522f5ae99cae3625151de8f706cacee1cba4b8e2832a"
+checksum = "8e985e0451871ad22fb8d2b6b076e2028a502a0d3950998c2c5c0a4f9b5d9679"
 dependencies = [
  "cfg-if",
  "core_detect",
- "multiversion",
  "multiversion_no_op",
  "rustversion",
  "scopeguard",
@@ -497,27 +496,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "multiversion"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4ca4bea16ffc3f443cf7d866912118196bfef4c6a1556ca00f9f9b00bb43f7c"
-dependencies = [
- "multiversion-macros",
-]
-
-[[package]]
-name = "multiversion-macros"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d416831a7317ef4b08bee00b69cbbb9c8763da7959a7026244d6266869f9c83"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 3.0.6",
-]
-
-[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -792,9 +770,9 @@ dependencies = [
 
 [[package]]
 name = "rust-samp"
-version = "3.4.0"
+version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8dfaa4bbc0847a5f6f4ccb77694a02cedc2cf11d61722d41f6ba6ae80c8f2887"
+checksum = "42851d4b9181287c2d563c10252854ab87abd61336f7086feb9f2c6ec9e93320"
 dependencies = [
  "fern",
  "log",
@@ -806,9 +784,9 @@ dependencies = [
 
 [[package]]
 name = "rust-samp-codegen"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73c2a29e2ef6737ca3afe059e0006e1bc8fd88f017a38d6f2bc46e8f348eac5a"
+checksum = "4b6c4017948d2be2b498361740bc84baa65ee0565572c8b8a7a06dcf237d064b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -817,9 +795,9 @@ dependencies = [
 
 [[package]]
 name = "rust-samp-sdk"
-version = "3.4.0"
+version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92de2d90ad83ece4e7ce5911cbe55f5bbce2f2099f9807cfed8b7980bf89f855"
+checksum = "cf910ae41fe86cd09c57c440c86524f7e0e06b328df47fff836190a7d6597c84"
 dependencies = [
  "bitflags 2.13.2",
 ]
@@ -938,9 +916,9 @@ checksum = "7a3d689654af89bdfeba29a914ab6ac0236d382eb3b764f7454dde052f2821f8"
 
 [[package]]
 name = "smallvec"
-version = "1.16.1"
+version = "1.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
+checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 
 [[package]]
 name = "socket2"
