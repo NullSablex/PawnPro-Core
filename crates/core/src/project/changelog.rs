@@ -114,12 +114,14 @@ mod tests {
     fn a_different_version_does_not_match_by_prefix() {
         // `3.5.0` não pode casar com `3.5.01`: são versões distintas.
         let raw = "## [3.50.0] - 2026-09-01\n\n- Outra\n";
-        assert!(extract_section_from(raw, "3.5.0").is_empty());
+        let got = extract_section_from(raw, "3.5.0");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
     fn an_absent_version_yields_nothing() {
-        assert!(extract_section_from(CHANGELOG, "9.9.9").is_empty());
+        let got = extract_section_from(CHANGELOG, "9.9.9");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -131,7 +133,8 @@ mod tests {
     #[test]
     fn a_missing_file_is_not_an_error() {
         // Não ter changelog não vale interromper a extensão.
-        assert!(extract_section(Path::new("/nao/existe/CHANGELOG.md"), "1.0.0").is_empty());
+        let got = extract_section(Path::new("/nao/existe/CHANGELOG.md"), "1.0.0");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

@@ -274,7 +274,7 @@ mod tests {
         // Quem os define é a montagem, a partir do projeto.
         let out = sanitize_user_args(&args(&["-i/x", "-o/y", "-d3"]), &supported());
         assert_eq!(out.kept, ["-d3"]);
-        assert!(out.removed.is_empty());
+        assert!(out.removed.is_empty(), "{:?}", out.removed);
     }
 
     #[test]

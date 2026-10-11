@@ -133,7 +133,8 @@ mod tests {
             },
             ..NamingConfig::default() // enabled: false
         };
-        assert!(suggestions_for("DoThing", &cfg).is_empty());
+        let got = suggestions_for("DoThing", &cfg);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

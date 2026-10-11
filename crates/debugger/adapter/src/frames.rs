@@ -90,7 +90,8 @@ mod tests {
         let first = FrameCache::default();
         let second = FrameCache::default();
         first.replace(vec![frame("1")]);
-        assert!(second.all().is_empty());
+        let got = second.all();
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -107,7 +108,9 @@ mod tests {
         let cache = FrameCache::default();
         cache.replace(vec![frame("1")]);
         cache.clear();
-        assert!(cache.all().is_empty());
-        assert!(cache.vars(0).is_empty());
+        let got = cache.all();
+        assert!(got.is_empty(), "{got:?}");
+        let got = cache.vars(0);
+        assert!(got.is_empty(), "{got:?}");
     }
 }

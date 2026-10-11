@@ -320,7 +320,7 @@ mod tests {
     fn nonexistent_paths_are_dropped() {
         let tmp = TempDir::new("missing");
         let found = build_include_paths(&[tmp.0.join("nao-existe")], &[], &tmp.0, None);
-        assert!(found.is_empty());
+        assert!(found.is_empty(), "{found:?}");
     }
 
     #[test]
@@ -376,7 +376,8 @@ mod tests {
     fn depth_limit_is_honored() {
         let tmp = TempDir::new("depth");
         tmp.file("a/b/c/deep.inc", "");
-        assert!(list_inc_files_recursive(&tmp.0, 1).is_empty());
+        let got = list_inc_files_recursive(&tmp.0, 1);
+        assert!(got.is_empty(), "{got:?}");
         assert_eq!(list_inc_files_recursive(&tmp.0, 5).len(), 1);
     }
 
@@ -424,6 +425,7 @@ mod tests {
 
     #[test]
     fn unreadable_file_yields_no_natives() {
-        assert!(list_natives(Path::new("/nao/existe/x.inc")).is_empty());
+        let got = list_natives(Path::new("/nao/existe/x.inc"));
+        assert!(got.is_empty(), "{got:?}");
     }
 }

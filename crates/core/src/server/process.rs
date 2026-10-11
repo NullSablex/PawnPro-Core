@@ -223,7 +223,8 @@ mod tests {
 
     #[test]
     fn an_unlikely_port_has_no_owner() {
-        assert!(pids_on_port(59991).is_empty());
+        let got = pids_on_port(59991);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -255,7 +256,8 @@ mod tests {
     #[test]
     fn project_servers_applies_the_owner_filter() {
         // Sem executável nada é devolvido, mesmo que a porta esteja ocupada.
-        assert!(project_servers_on_port(7777, Path::new("")).is_empty());
+        let got = project_servers_on_port(7777, Path::new(""));
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

@@ -137,7 +137,8 @@ mod tests {
     #[test]
     fn consistent_indent_no_warning() {
         let src = "main()\n{\n\tfoo();\n\tbar();\n}";
-        assert!(diag_lines(src).is_empty());
+        let got = diag_lines(src);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -151,7 +152,8 @@ mod tests {
     #[test]
     fn nested_blocks_consistent_no_warning() {
         let src = "main()\n{\n\tif (x)\n\t{\n\t\tfoo();\n\t\tbar();\n\t}\n}";
-        assert!(diag_lines(src).is_empty());
+        let got = diag_lines(src);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -200,7 +202,8 @@ mod tests {
     #[test]
     fn pragma_tabsize_in_file_takes_effect() {
         let src = "#pragma tabsize 4\nmain()\n{\n    foo();\n    bar();\n}";
-        assert!(diag_lines(src).is_empty());
+        let got = diag_lines(src);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

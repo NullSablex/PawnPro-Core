@@ -418,7 +418,7 @@ mod tests {
             .send("gmx", Duration::from_millis(400))
             .expect("o comando foi enviado");
         // Vazio é resultado legítimo, não erro.
-        assert!(reply.lines.is_empty());
+        assert!(reply.lines.is_empty(), "{:?}", reply.lines);
         assert_eq!(reply.command, "gmx");
         let _ = handle.join();
     }

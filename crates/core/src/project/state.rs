@@ -200,7 +200,8 @@ mod tests {
         let tmp = TempDir::new("missing");
         let st = StateManager::new(&tmp.0);
         assert_eq!(st.get_all(), &PawnProState::default());
-        assert!(st.server().favorites.is_empty());
+        let got = &st.server().favorites;
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -227,7 +228,8 @@ mod tests {
         )
         .expect("escrever");
         let st = StateManager::new(&tmp.0);
-        assert!(st.server().favorites.is_empty());
+        let got = &st.server().favorites;
+        assert!(got.is_empty(), "{got:?}");
         assert_eq!(st.server().history, ["players", "gmx"]);
     }
 

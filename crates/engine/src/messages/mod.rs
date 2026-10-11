@@ -34,7 +34,7 @@ impl Locale {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum MsgKey {
     IncludeNotFound,
     IncludeTried,
@@ -163,14 +163,19 @@ mod tests {
     #[test]
     fn every_locale_resolves_a_message() {
         // Toda variante deve devolver texto não vazio para uma chave qualquer.
+        let keys = [
+            MsgKey::HoverDeprecated,
+            MsgKey::HoverParams,
+            MsgKey::PragmaUnknown,
+            MsgKey::PragmaUnknownDidYouMean,
+            MsgKey::PragmaDeprecatedQuoted,
+            MsgKey::HoverReturns,
+            MsgKey::HoverRemarks,
+        ];
         for loc in [Locale::PtBr, Locale::Es, Locale::Ru, Locale::Ro, Locale::En] {
-            assert!(!msg(loc, MsgKey::HoverDeprecated).is_empty());
-            assert!(!msg(loc, MsgKey::HoverParams).is_empty());
-            assert!(!msg(loc, MsgKey::PragmaUnknown).is_empty());
-            assert!(!msg(loc, MsgKey::PragmaUnknownDidYouMean).is_empty());
-            assert!(!msg(loc, MsgKey::PragmaDeprecatedQuoted).is_empty());
-            assert!(!msg(loc, MsgKey::HoverReturns).is_empty());
-            assert!(!msg(loc, MsgKey::HoverRemarks).is_empty());
+            for key in keys {
+                assert!(!msg(loc, key).is_empty(), "{key:?} vazia em {loc:?}");
+            }
         }
     }
 }

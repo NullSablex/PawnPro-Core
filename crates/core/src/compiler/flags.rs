@@ -203,6 +203,7 @@ Options:
         // Sem conseguir perguntar, o seguro é não injetar flag nenhuma.
         let s = detect_supported_flags("/nao/existe/pawncc");
         assert!(s.single.is_empty());
-        assert!(compute_minimal_args(&s).is_empty());
+        let got = compute_minimal_args(&s);
+        assert!(got.is_empty(), "{got:?}");
     }
 }

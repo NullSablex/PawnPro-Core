@@ -419,7 +419,7 @@ mod tests {
     fn a_notification_gets_no_answer() {
         // Sem `id` não há a quem responder.
         let out = exchange(r#"{"jsonrpc":"2.0","method":"core.version"}"#);
-        assert!(out.is_empty());
+        assert!(out.is_empty(), "{out:?}");
     }
 
     #[test]
@@ -496,7 +496,7 @@ mod tests {
             .filter_map(|m| m["result"]["address"].as_str())
             .collect();
         assert_eq!(addresses.len(), 2, "faltou resposta: {out:?}");
-        assert!(!addresses[0].is_empty());
+        assert!(!addresses[0].is_empty(), "endereço vazio: {out:?}");
         assert_eq!(addresses[0], addresses[1]);
     }
 

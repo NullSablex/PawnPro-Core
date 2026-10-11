@@ -226,7 +226,8 @@ mod tests {
         assert_eq!(declared_names("\tfor (new i = 0; i < n; i++)"), vec!["i"]);
         assert_eq!(declared_names("\tnew const k = 3;"), vec!["k"]);
         assert_eq!(declared_names("\tstatic s;"), vec!["s"]);
-        assert!(declared_names("\tx = new_value;").is_empty());
+        let got = declared_names("\tx = new_value;");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

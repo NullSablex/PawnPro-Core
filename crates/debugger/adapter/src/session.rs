@@ -1843,7 +1843,8 @@ mod tests {
         project.write_source("x\ny\nfoo();\nnew_call();\nbar();\n", 3_000);
 
         let out = set_line_breakpoints(&mut ses, &project.source(), &[4]);
-        assert!(ses.resolved_breakpoints().is_empty());
+        let got = ses.resolved_breakpoints();
+        assert!(got.is_empty(), "{got:?}");
         let bp = &first_response(&out).body["breakpoints"][0];
         assert_eq!(bp["verified"], false);
         assert_eq!(bp["line"], 4);
@@ -1864,7 +1865,8 @@ mod tests {
         ses.set_compiled(&project.dir.join("a.amx"), sample_dbg());
 
         let out = set_line_breakpoints(&mut ses, &project.source(), &[4]);
-        assert!(ses.resolved_breakpoints().is_empty());
+        let got = ses.resolved_breakpoints();
+        assert!(got.is_empty(), "{got:?}");
         assert_eq!(
             first_response(&out).body["breakpoints"][0]["verified"],
             false

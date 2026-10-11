@@ -146,7 +146,8 @@ mod tests {
     #[test]
     fn ignores_globals_at_top_level() {
         // Fora de qualquer função (brace_depth == 0) não coletamos.
-        assert!(names("new gGlobal;").is_empty());
+        let got = names("new gGlobal;");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

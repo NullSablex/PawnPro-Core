@@ -398,7 +398,8 @@ mod tests {
         let tmp = TempDir::new("oversized");
         let path = tmp.0.join("nomes.ban");
         std::fs::write(&path, "termo\noutro\n").expect("escrever");
-        assert!(read_list_file(&path, 4).is_empty());
+        let got = read_list_file(&path, 4);
+        assert!(got.is_empty(), "{got:?}");
         assert_eq!(read_list_file(&path, 4096), ["termo", "outro"]);
     }
 }

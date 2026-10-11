@@ -669,7 +669,8 @@ mod tests {
     fn an_include_file_is_quiet_unless_asked() {
         let project = Project::new("quiet");
         let lib = project.write("include/lib.inc", "stock NobodyCalls()\n{\n}\n");
-        assert!(project.unused(&lib, false, false).is_empty());
+        let got = project.unused(&lib, false, false);
+        assert!(got.is_empty(), "{got:?}");
         assert!(flagged(
             &project.unused(&lib, true, false),
             codes::PP0006,

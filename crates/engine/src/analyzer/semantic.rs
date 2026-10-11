@@ -130,13 +130,15 @@ mod tests {
 
     #[test]
     fn a_native_without_semicolon_or_body_is_not_flagged() {
-        assert!(codes_of("native Foo(a)\nnative Bar(b);\n").is_empty());
+        let got = codes_of("native Foo(a)\nnative Bar(b);\n");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
     fn correct_declarations_are_not_flagged() {
         let src = "native Foo(a);\nforward Bar();\nstock Baz()\n{\n}\npublic Qux() {\n}\n";
-        assert!(codes_of(src).is_empty());
+        let got = codes_of(src);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
@@ -147,11 +149,13 @@ mod tests {
     #[test]
     fn nothing_inside_a_body_is_a_declaration() {
         // A linha interna parece uma declaração, mas está dentro de uma função.
-        assert!(codes_of("main()\n{\n    stock Foo(a);\n}\n").is_empty());
+        let got = codes_of("main()\n{\n    stock Foo(a);\n}\n");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]
     fn a_comment_is_not_a_declaration() {
-        assert!(codes_of("// native Foo(a) {\n/* stock Bar(); */\n").is_empty());
+        let got = codes_of("// native Foo(a) {\n/* stock Bar(); */\n");
+        assert!(got.is_empty(), "{got:?}");
     }
 }

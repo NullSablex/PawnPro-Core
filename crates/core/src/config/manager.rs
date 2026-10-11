@@ -613,7 +613,8 @@ mod tests {
             r#"{"locale":"ru","analysis":{"naming":{"style":{"functions":["camelCase","/^PP_/"]}}}}"#,
         );
         let m = tmp.manager();
-        assert!(m.rejected_keys().is_empty());
+        let got = m.rejected_keys();
+        assert!(got.is_empty(), "{got:?}");
         assert_eq!(m.get_all().analysis.naming.style.functions.len(), 2);
     }
 
@@ -749,7 +750,8 @@ mod tests {
         let m = tmp.manager();
         assert_eq!(m.raw_project_naming_list("blocklist"), ["x", "y"]);
         // Ausente devolve vazio, não o padrão.
-        assert!(m.raw_project_naming_list("allowShortInLoops").is_empty());
+        let got = m.raw_project_naming_list("allowShortInLoops");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

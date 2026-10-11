@@ -505,7 +505,7 @@ mod tests {
             d.summary.as_deref(),
             Some("Devolve o nome do jogador. Vazio se o id for inválido.")
         );
-        assert!(d.params.is_empty());
+        assert!(d.params.is_empty(), "{:?}", d.params);
     }
 
     /// O hover renderizado de cada formato, de ponta a ponta.
