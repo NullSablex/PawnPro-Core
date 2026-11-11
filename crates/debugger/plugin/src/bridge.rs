@@ -8,7 +8,7 @@
 //! o que vem do ambiente; a conexão em si é exercitada pelos testes do núcleo.
 
 use std::io::{self, BufRead, BufReader, Write};
-use std::sync::{Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -21,15 +21,14 @@ use pawnpro_dbg_protocol::{self as wire, Command, Event, Step};
 use crate::control::StepMode;
 use crate::gate::{PauseGate, Resume};
 
-/// Metade de envio do socket local — para escrever eventos à sessão.
-type SendHalf = <LocalStream as interprocess::local_socket::traits::Stream>::SendHalf;
-
 /// Estado global da ponte. O hook (thread da VM) e a thread do socket
 /// compartilham: o portão de pausa e a metade de envio ao adaptador.
 pub struct Bridge {
     gate: PauseGate,
-    /// Metade de envio para o adaptador (preenchida ao conectar).
-    out: Mutex<Option<SendHalf>>,
+    /// Socket do adaptador, para escrever eventos (preenchido ao conectar). A
+    /// thread de leitura tem a própria referência: `&LocalStream` implementa
+    /// `Read` e `Write`, então os dois lados compartilham o mesmo stream.
+    out: Mutex<Option<Arc<LocalStream>>>,
     /// `true` quando o adaptador já enviou a configuração inicial (breakpoints).
     /// A primeira VM espera por isto na carga — ver [`Bridge::wait_configured`].
     configured: Mutex<bool>,
@@ -78,10 +77,10 @@ impl Bridge {
     pub fn send(&self, ev: &Event) {
         let Ok(line) = wire::to_line(ev) else { return };
         if let Ok(mut guard) = self.out.lock()
-            && let Some(stream) = guard.as_mut()
+            && let Some(stream) = guard.as_ref()
         {
             // Erro de escrita = adaptador caiu; descarta a conexão.
-            if stream.write_all(line.as_bytes()).is_err() {
+            if (&**stream).write_all(line.as_bytes()).is_err() {
                 *guard = None;
             }
         }
@@ -148,12 +147,12 @@ fn connect(session: &Session) -> io::Result<LocalStream> {
     Ok(stream)
 }
 
-/// Atende a sessão conectada: separa o stream em leitura/escrita, guarda a
-/// metade de envio e lê comandos linha a linha até desconectar.
+/// Atende a sessão conectada: publica o stream para os eventos de saída e lê
+/// comandos linha a linha até desconectar.
 fn handle_client(stream: LocalStream) {
-    let (recv, send) = stream.split();
+    let stream = Arc::new(stream);
     if let Ok(mut guard) = BRIDGE.out.lock() {
-        *guard = Some(send);
+        *guard = Some(Arc::clone(&stream));
     }
     // Antes de qualquer outra coisa: quem somos. A sessão compara com a
     // própria versão e avisa o usuário se forem incompatíveis, em vez de
@@ -161,7 +160,7 @@ fn handle_client(stream: LocalStream) {
     BRIDGE.send(&Event::Hello {
         version: env!("CARGO_PKG_VERSION").to_string(),
     });
-    let reader = BufReader::new(recv);
+    let reader = BufReader::new(&*stream);
     for line in reader.lines() {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
@@ -171,7 +170,7 @@ fn handle_client(stream: LocalStream) {
             apply(cmd);
         }
     }
-    // A sessão saiu: limpa a metade de envio e libera qualquer VM ainda em espera
+    // A sessão saiu: descarta o lado de envio e libera qualquer VM ainda em espera
     // pela configuração (senão a carga ficaria presa até o timeout).
     if let Ok(mut guard) = BRIDGE.out.lock() {
         *guard = None;

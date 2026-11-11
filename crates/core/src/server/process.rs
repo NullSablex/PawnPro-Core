@@ -89,7 +89,10 @@ pub fn is_project_server(pid: u32, server_exe: &Path) -> bool {
     };
 
     let target_pid = Pid::from_u32(pid);
-    let mut sys = System::new();
+    // Sem acesso à tabela de processos não há como provar nada: na dúvida.
+    let Ok(mut sys) = System::new() else {
+        return false;
+    };
     sys.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[target_pid]),
         true,
@@ -117,7 +120,7 @@ pub fn is_project_server(pid: u32, server_exe: &Path) -> bool {
 /// PIDs juntos passaria um valor duplicado ao `sysinfo`, que não devolve nada.
 fn current_user_id() -> Option<sysinfo::Uid> {
     let me = sysinfo::get_current_pid().ok()?;
-    let mut sys = System::new();
+    let mut sys = System::new().ok()?;
     sys.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[me]),
         true,
@@ -173,8 +176,13 @@ pub fn kill_process(pid: u32, timeout: Duration) -> bool {
 /// Um zumbi não conta como vivo: já morreu e só ocupa a tabela até o pai
 /// colhê-lo. Tratá-lo como vivo faria o encerramento gastar o prazo inteiro e
 /// reportar falha depois de ter funcionado.
+///
+/// Se a tabela de processos não puder ser lida, conta como vivo: o encerramento
+/// não pode anunciar sucesso sem ter conferido.
 fn is_alive(pid: Pid) -> bool {
-    let mut sys = System::new();
+    let Ok(mut sys) = System::new() else {
+        return true;
+    };
     sys.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
         true,
@@ -197,7 +205,11 @@ fn signal(pid: Pid, force: bool) {
         return;
     }
 
-    let mut sys = System::new();
+    // Sem a tabela de processos não há a quem mandar o sinal; `is_alive` dá a
+    // resposta de qualquer forma.
+    let Ok(mut sys) = System::new() else {
+        return;
+    };
     sys.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
         true,
