@@ -5,14 +5,12 @@
 # result twice: as SARIF to code scanning, and — via `publish_results` — to the
 # public OpenSSF API, which is what backs the Scorecard badge in the README.
 #
-# `publish_results` only works on a push to the default branch of a public
-# repository; on a pull request the workflow still runs and reports to code
-# scanning, without publishing.
+# `publish_results` only works for runs on the default branch of a public
+# repository, which is what the weekly and manual runs below are. It does not
+# run on every push: the score changes with repository settings, not commits.
 name: Scorecard
 
 on:
-  push:
-    branches: [ "master" ]
   # Weekly, so the score keeps up with the checks Scorecard adds over time.
   schedule:
     - cron: '31 4 * * 1'

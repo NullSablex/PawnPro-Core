@@ -1,64 +1,119 @@
 name: CI
 
+# Ponto de entrada único para pushes e pull requests. O job `changes` mapeia o
+# diff para os checks afetados e pula o resto. O job final `CI` é o único status
+# obrigatório, então um check pulado nunca deixa o merge pendente. Markdown da
+# raiz, changelogs, licença, imagens e metadados do repositório não disparam
+# nada além deste gate.
+
 on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
+  workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
-    name: Check, Clippy & Test
+  changes:
+    name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      docs: ${{ steps.filter.outputs.docs }}
+      audit: ${{ steps.filter.outputs.audit }}
+      codeql: ${{ steps.filter.outputs.codeql }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Map changed paths to checks
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          all=false
+          if [ "$EVENT" = pull_request ]; then
+            files=$(git diff --name-only "$BASE...$HEAD")
+          elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] \
+            && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] \
+            && git cat-file -e "$BEFORE^{commit}" 2> /dev/null; then
+            files=$(git diff --name-only "$BEFORE" "$SHA")
+          else
+            all=true
+            files=''
+          fi
+          printf 'Changed files:\n%s\n' "${files:-(full run)}"
+          # Definições de CI afetam todos os checks: rodam tudo.
+          if grep -qE '^\.github/workflows/' <<< "$files"; then all=true; fi
+          match() {
+            if [ "$all" = true ] || grep -qE "$1" <<< "$files"; then echo true; else echo false; fi
+          }
+          rust=$(match '^(crates/|Cargo\.(toml|lock)$|\.cargo/|clippy\.toml$|rust-toolchain\.toml$)')
+          {
+            echo "rust=$rust"
+            echo "docs=$(match '^(docs/|zensical\.toml$|requirements-docs\.txt$)')"
+            echo "audit=$(match '^Cargo\.lock$')"
+            if [ "$rust" = true ] || [ "$all" = true ]; then echo codeql=true; else echo codeql=false; fi
+          } | tee -a "$GITHUB_OUTPUT"
+
+  rust:
+    name: Rust
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust.yml
+
+  docs:
+    name: Docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     permissions:
       contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        with:
-          components: clippy, rustfmt
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-
-      - name: Check
-        run: cargo check --workspace --all-targets
-
-      - name: Rustfmt
-        run: cargo fmt --all --check
-
-      - name: Clippy (pedantic, warnings as errors)
-        run: cargo clippy --workspace --all-targets -- -W clippy::pedantic -D warnings
-
-      - name: Test
-        run: cargo test --workspace
-
-      # Garante que o build otimizado compila sem erros.
-      - name: Build release
-        run: cargo build --workspace --release
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
 
   audit:
-    name: Security Audit
-    runs-on: ubuntu-latest
+    name: Audit
+    needs: changes
+    if: needs.changes.outputs.audit == 'true'
+    uses: ./.github/workflows/audit.yml
+
+  codeql:
+    name: CodeQL
+    needs: changes
+    if: needs.changes.outputs.codeql == 'true'
     permissions:
       contents: read
+      security-events: write
+      actions: read
+    uses: ./.github/workflows/codeql.yml
+
+  result:
+    name: CI
+    needs: [changes, rust, docs, audit, codeql]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --version 0.22.2 --locked
-
-      # Falha se houver vulnerabilidade conhecida nas dependências (RustSec).
-      - name: Audit dependencies
-        run: cargo audit
+      - name: Require every selected check to pass
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          if jq -e 'any(.[]; . == "failure" or . == "cancelled")' <<< "$RESULTS" > /dev/null; then
+            echo '::error::A selected check failed or was cancelled.'
+            exit 1
+          fi

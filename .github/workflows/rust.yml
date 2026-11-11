@@ -1,0 +1,43 @@
+name: Rust
+
+# Reusable: called by ci.yml when the crates or Cargo inputs change.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    name: Check, Clippy & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Check
+        run: cargo check --workspace --all-targets
+
+      - name: Rustfmt
+        run: cargo fmt --all --check
+
+      - name: Clippy (pedantic, warnings as errors)
+        run: cargo clippy --workspace --all-targets -- -W clippy::pedantic -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      # Garante que o build otimizado compila sem erros.
+      - name: Build release
+        run: cargo build --workspace --release
