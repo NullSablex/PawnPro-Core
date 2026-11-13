@@ -38,10 +38,7 @@ impl FrameCache {
     /// Variáveis em escopo no frame dado; vazio se o frame não existe.
     #[must_use]
     pub fn vars(&self, frame: usize) -> Vec<Var> {
-        self.lock()
-            .get(frame)
-            .map(|f| f.vars.clone())
-            .unwrap_or_default()
+        self.lock().get(frame).map_or_default(|f| f.vars.clone())
     }
 
     /// Reflete no cache uma célula editada — a variável `var` do `frame`, ou

@@ -39,10 +39,8 @@ pub fn dispatch(
                 ResponseError::invalid_params("nenhum projeto aberto — chame `config.open` antes")
             })?;
             let resolved = resolve_server_config(&server, &root);
-            let text = |path: Option<PathBuf>| {
-                path.map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_default()
-            };
+            let text =
+                |path: Option<PathBuf>| path.map_or_default(|p| p.to_string_lossy().into_owned());
             Ok(json!({
                 "exe": text(resolved.exe),
                 "cwd": resolved.cwd.to_string_lossy(),

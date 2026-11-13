@@ -161,7 +161,7 @@ impl Drop for EngineService {
 
 /// Monta as settings a partir da configuração e as entrega à engine.
 fn deliver(settings: &SettingsSender, manager: &ConfigManager, language: &Mutex<String>) {
-    let language = language.lock().map(|l| l.clone()).unwrap_or_default();
+    let language = language.lock().map_or_default(|l| l.clone());
     let built = build_settings(manager.get_all(), manager.project_root(), &language);
     crate::diag_info!(
         "core/engine",

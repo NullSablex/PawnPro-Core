@@ -320,14 +320,13 @@ impl ConfigManager {
             .and_then(Value::as_object)
             .and_then(|n| n.get(key))
             .and_then(Value::as_array)
-            .map(|items| {
+            .map_or_default(|items| {
                 items
                     .iter()
                     .filter_map(Value::as_str)
                     .map(ToString::to_string)
                     .collect()
             })
-            .unwrap_or_default()
     }
 
     fn path_for(&self, scope: Scope) -> &Path {

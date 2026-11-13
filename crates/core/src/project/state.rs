@@ -87,14 +87,13 @@ fn read_state(path: &Path) -> Option<PawnProState> {
         server
             .and_then(|s| s.get(key))
             .and_then(serde_json::Value::as_array)
-            .map(|items| {
+            .map_or_default(|items| {
                 items
                     .iter()
                     .filter_map(serde_json::Value::as_str)
                     .map(ToString::to_string)
                     .collect()
             })
-            .unwrap_or_default()
     };
     Some(PawnProState {
         server: ServerState {

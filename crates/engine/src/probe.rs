@@ -599,8 +599,7 @@ fn position_of(text: &str, needle: &str, skip: usize) -> Option<Position> {
 fn file_of(loc: &Location) -> PathBuf {
     loc.uri
         .to_file_path()
-        .map(|p| p.canonicalize().unwrap_or(p))
-        .unwrap_or_default()
+        .map_or_default(|p| p.canonicalize().unwrap_or(p))
 }
 
 /// O uso real: o `gl_commands.inc` chama `NivelRequerido`, que o

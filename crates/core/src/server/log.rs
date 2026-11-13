@@ -37,8 +37,7 @@ pub fn read_since(path: &Path, from: Option<u64>, encoding: &str) -> LogChunk {
     let start = if size < from { 0 } else { from };
     let text = read_range(path, start, size)
         .filter(|bytes| !bytes.is_empty())
-        .map(|bytes| crate::compiler::build::decode_output(&bytes, encoding))
-        .unwrap_or_default();
+        .map_or_default(|bytes| crate::compiler::build::decode_output(&bytes, encoding));
     LogChunk { size, text }
 }
 

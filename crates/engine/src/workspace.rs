@@ -632,10 +632,7 @@ fn parse_sdk(path: &PathBuf) -> Option<ParsedFile> {
 
     // open.mp.inc itself has almost no symbols — they live in _open_mp and sub-includes.
     // Resolve transitively so all SDK symbols are visible.
-    let inc_paths: Vec<PathBuf> = path
-        .parent()
-        .map(|p| vec![p.to_path_buf()])
-        .unwrap_or_default();
+    let inc_paths: Vec<PathBuf> = path.parent().map_or_default(|p| vec![p.to_path_buf()]);
     let resolved = collect_included_files(path, &inc_paths, &root.includes, 16, 1000);
 
     for inc_path in &resolved.paths {

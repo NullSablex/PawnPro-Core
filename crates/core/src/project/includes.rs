@@ -94,16 +94,13 @@ pub fn build_include_paths(
         Some(workspace_root.to_path_buf())
     };
 
-    let defaults: Vec<PathBuf> = search_root
-        .as_ref()
-        .map(|root| {
-            INCLUDE_SUBDIRS
-                .iter()
-                .map(|sub| root.join(sub))
-                .filter(|p| is_dir(p))
-                .collect()
-        })
-        .unwrap_or_default();
+    let defaults: Vec<PathBuf> = search_root.as_ref().map_or_default(|root| {
+        INCLUDE_SUBDIRS
+            .iter()
+            .map(|sub| root.join(sub))
+            .filter(|p| is_dir(p))
+            .collect()
+    });
 
     // Só quando nada foi encontrado na raiz: o arquivo pode estar num
     // subprojeto com include próprio.

@@ -109,7 +109,7 @@ pub fn on_break(amx: &Amx) {
         if let Ok(mut ctrl) = STATE.lock() {
             ctrl.hit_breakpoint(); // limpa step pendente e marca como iniciado
         }
-        let locale = LOCALE.lock().map(|g| *g).unwrap_or_default();
+        let locale = LOCALE.lock().map_or_default(|g| *g);
         on_pause(amx, cip, frm, "exception", Some(err.message(locale)));
         return;
     }

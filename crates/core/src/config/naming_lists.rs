@@ -37,15 +37,13 @@ pub fn read_list_file(path: &Path, max_bytes: u64) -> Vec<String> {
     if std::fs::metadata(path).is_ok_and(|m| m.len() > max_bytes) {
         return Vec::new();
     }
-    std::fs::read_to_string(path)
-        .map(|text| {
-            text.lines()
-                .map(str::trim)
-                .filter(|l| !l.is_empty() && !l.starts_with('#'))
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
+    std::fs::read_to_string(path).map_or_default(|text| {
+        text.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(ToString::to_string)
+            .collect()
+    })
 }
 
 /// Cria o arquivo, se ainda não existir.

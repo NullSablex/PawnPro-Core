@@ -506,7 +506,7 @@ impl Session {
             .arguments
             .get("breakpoints")
             .and_then(Value::as_array)
-            .map(|arr| {
+            .map_or_default(|arr| {
                 arr.iter()
                     .filter_map(|b| {
                         let line = i32::try_from(b.get("line").and_then(Value::as_i64)?).ok()?;
@@ -525,8 +525,7 @@ impl Session {
                         })
                     })
                     .collect()
-            })
-            .unwrap_or_default();
+            });
 
         // Guarda o pedido como veio: é o que permite resolver tudo de novo se o
         // `.amx` mudar (recompilação + restart).
@@ -557,12 +556,11 @@ impl Session {
             .arguments
             .get("breakpoints")
             .and_then(Value::as_array)
-            .map(|arr| {
+            .map_or_default(|arr| {
                 arr.iter()
                     .filter_map(|b| b.get("name").and_then(Value::as_str).map(str::to_string))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
 
         let mut fn_bps = Vec::new();
         let mut verified = Vec::new();
@@ -982,12 +980,11 @@ impl Session {
             .arguments
             .get("breakpoints")
             .and_then(Value::as_array)
-            .map(|arr| {
+            .map_or_default(|arr| {
                 arr.iter()
                     .filter_map(|b| parse_data_id(b.get("dataId")?.as_str()?))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
 
         let verified: Vec<Value> = watches
             .iter()
@@ -1285,12 +1282,11 @@ fn spawn_spec_from(arguments: &Value, amx_path: String) -> Option<SpawnSpec> {
     let args = cmd
         .get("args")
         .and_then(Value::as_array)
-        .map(|a| {
+        .map_or_default(|a| {
             a.iter()
                 .filter_map(|v| v.as_str().map(str::to_string))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     let text = |value: Option<&Value>| value.and_then(Value::as_str).unwrap_or("").to_string();
     Some(SpawnSpec {
         exe,

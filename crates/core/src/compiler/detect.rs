@@ -174,7 +174,7 @@ pub fn detect_pawncc(
         return Ok(found);
     }
 
-    let from_workspace = workspace_root.map(workspace_candidates).unwrap_or_default();
+    let from_workspace = workspace_root.map_or_default(workspace_candidates);
     from_workspace
         .into_iter()
         .chain(common_candidates())
